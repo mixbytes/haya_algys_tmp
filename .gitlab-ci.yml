@@ -1,7 +1,87 @@
-image: docker:latest
+stages:
+  - publish builder
+  - publish to gitlab registry normal
+  - publish to gitlab registry dev
 
-build:
+variables:
+  REGISTRY: "registry.gitlab.com/cyberos/infrastructure"
+
+.docker-login: &docker-login
+  variables:
+    GIT_STRATEGY: clone
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  image: docker:stable
+  except:
+    - schedules
+  services:
+    - docker:dind
+  before_script:
+    - echo "${GITLAB_PASS}" | docker login registry.gitlab.com -u "${GITLAB_USER}" --password-stdin
+
+publish-nomral:
+  stage: publish to gitlab registry normal
+  image: docker:stable
+  variables:
+    GIT_STRATEGY: clone
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  only:
+    - master
+  services:
+    - docker:dind
+  except:
+    - schedules
+  <<: *docker-login
   script:
-      - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
-      - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA -f Docker/Dockerfile .
-      - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - cd Docker
+    - docker build -t cyberos .
+    - docker tag cyberos ${REGISTRY}/cyberos:${CI_COMMIT_SHA:0:8}
+    - docker tag cyberos ${REGISTRY}/cyberos:${CI_COMMIT_REF_NAME}-latest
+    - docker tag cyberos ${REGISTRY}/cyberos:latest
+    - docker push ${REGISTRY}/cyberos
+
+publish-dev:
+  stage: publish to gitlab registry dev
+  image: docker:stable
+  variables:
+    GIT_STRATEGY: clone
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  only:
+    - master
+  services:
+    - docker:dind
+  except:
+    - schedules
+  <<: *docker-login
+  script:
+    - cd Docker/dev
+    - docker build -t cyberos-dev .
+    - docker tag cyberos-dev ${REGISTRY}/cyberos-dev:${CI_COMMIT_SHA:0:8}
+    - docker tag cyberos-dev ${REGISTRY}/cyberos-dev:${CI_COMMIT_REF_NAME}-latest
+    - docker tag cyberos-dev ${REGISTRY}/cyberos-dev:latest
+    - docker push ${REGISTRY}/cyberos-dev
+
+publish-builder:
+  stage: publish builder
+  image: docker:stable
+  variables:
+    GIT_STRATEGY: clone
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  only:
+    changes:
+      - Docker/builder/Dockerfile
+  services:
+    - docker:dind
+  except:
+    - schedules
+  <<: *docker-login
+  script:
+    - cd Docker/builder
+    - docker build -t cyberos-builder .
+    - docker tag cyberos-builder ${REGISTRY}/cyberos-builder:${CI_COMMIT_SHA:0:8}
+    - docker tag cyberos-builder ${REGISTRY}/cyberos-builder:${CI_COMMIT_REF_NAME}-latest
+    - docker tag cyberos-builder ${REGISTRY}/cyberos-builder:latest
+    - docker push ${REGISTRY}/cyberos-builder
