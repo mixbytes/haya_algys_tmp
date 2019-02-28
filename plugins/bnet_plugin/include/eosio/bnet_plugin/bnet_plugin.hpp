@@ -45,6 +45,15 @@ class bnet_plugin : public plugin<bnet_plugin> {
       void plugin_startup();
       void plugin_shutdown();
 
+      template <typename T, typename Call>
+      void subscribe(uint32_t msg_type, Call && cb);
+
+      template <typename T>
+      void bcast(uint32_t msg_type, T && msg);
+
+      template <typename T>
+      void send(uint32_t session_id, uint32_t msg_type, T && msg);
+
    private:
       bnet_ptr my;
 };
