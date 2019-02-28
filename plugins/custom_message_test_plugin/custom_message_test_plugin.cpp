@@ -107,7 +107,7 @@ struct custom_message_test_plugin_impl {
       }
    }
    
-   void send(uint32_t type, uint32_t session_id, const variant& var) {
+   void send(uint32_t session_id, uint32_t type, const variant& var) {
       try {
          switch (type) {
             case struct_message_type:
@@ -139,6 +139,15 @@ struct custom_message_test_plugin_impl {
          wlog("received custom message, session_id: ${ses_id}, type: ${type}, thread: ${thread}",
             ("ses_id", ses_id)
             ("type", struct_message_type)
+            ("thread", get_thread_id())
+         );
+      });
+
+      app().get_plugin<bnet_plugin>().subscribe<string_message>(string_message_type,
+      [](uint32_t ses_id, const string_message & msg) {
+         wlog("received custom message, session_id: ${ses_id}, type: ${type}, thread: ${thread}",
+            ("ses_id", ses_id)
+            ("type", string_message_type)
             ("thread", get_thread_id())
          );
       });

@@ -951,6 +951,9 @@ namespace eosio {
                  case bnet_message::tag<pong>::value:
                     on( msg.get<pong>() );
                     break;
+                 case bnet_message::tag<custom_message>::value:
+                    on( msg.get<custom_message>() );
+                    break;
                  default:
                     wlog( "bad message received" );
                     _ws->close( boost::beast::websocket::close_code::bad_payload );
@@ -1158,7 +1161,7 @@ namespace eosio {
          std::shared_ptr<boost::asio::deadline_timer>           _timer;    // only access on app io_service
          std::map<const session*, std::weak_ptr<session> >      _sessions; // only access on app io_service
          std::map<uint32_t, const session* >                    _sessions_by_num;
-         std::map<uint32_t, CustomHandler>                      _custom_handlers;
+         std::map<uint32_t, std::vector<CustomHandler>>         _custom_handlers;
 
          channels::irreversible_block::channel_type::handle     _on_irb_handle;
          channels::accepted_block::channel_type::handle         _on_accepted_block_handle;
@@ -1168,7 +1171,11 @@ namespace eosio {
 
          void subscribe(uint32_t msg_type, CustomHandler && cb) {
             if (_custom_handlers.find(msg_type) == _custom_handlers.end()) {
-               _custom_handlers.insert(std::make_pair(msg_type, std::move(cb)));
+               vector<CustomHandler> vec = { std::move(cb) };
+               _custom_handlers.insert(std::make_pair(msg_type, std::move(vec)));
+            }
+            else {
+               _custom_handlers[msg_type].push_back(std::move(cb));
             }
          }
 
@@ -1184,6 +1191,7 @@ namespace eosio {
             custom_message mess{msg_type, msg};
 
             app().get_io_service().post([this, session_id, mess=std::move(mess)] {
+               elog("ses by num, num: ${num}, size: ${size}", ("num", session_id)("size", _sessions_by_num.size()));
                if (_sessions_by_num.find(session_id) != _sessions_by_num.end()) {
                   auto ses_wptr = _sessions[_sessions_by_num[session_id]];
                   if (auto ses = ses_wptr.lock()) {
@@ -1517,10 +1525,12 @@ namespace eosio {
 
 
    void session::on( const custom_message& msg ) {
-      peer_ilog(this, "received custom message with type ${type}", ("type", msg.type));
+      peer_wlog(this, "received custom message with type ${type}", ("type", msg.type));
       auto handler_itr = _net_plugin->_custom_handlers.find(msg.type);
       if (handler_itr != _net_plugin->_custom_handlers.end()) {
-         handler_itr->second(_session_num, msg.data);
+         for (auto && cb: handler_itr->second) {
+            cb(_session_num, msg.data);
+         }
       }
       else {
          peer_wlog(this, "Handler not found for custom message with type ${type}", ("type", msg.type));
