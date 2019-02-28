@@ -1166,28 +1166,22 @@ namespace eosio {
          channels::rejected_block::channel_type::handle         _on_bad_block_handle;
          channels::accepted_transaction::channel_type::handle   _on_appled_trx_handle;
 
-         template <typename T, typename Call>
-         void subscribe(uint32_t msg_type, Call && cb) {
+         void subscribe(uint32_t msg_type, CustomHandler && cb) {
             if (_custom_handlers.find(msg_type) == _custom_handlers.end()) {
-               _custom_handlers.insert(std::make_pair(msg_type,
-               [cb = std::move(cb)](uint32_t session_num, const vector<char> &raw_msg) {
-                  cb(session_num, fc::raw::unpack<T>(raw_msg));
-               }));
+               _custom_handlers.insert(std::make_pair(msg_type, std::move(cb)));
             }
          }
 
-         template <typename T>
-         void bcast(uint32_t msg_type, T && msg) {
-            custom_message mess(msg_type, std::move(msg));
+         void bcast(uint32_t msg_type, const vector<char>& msg) {
+            custom_message mess {msg_type, msg};
 
             for_each_session([mess = std::move(mess), msg_type]( auto ses ) {
                ses->send(mess);
             });
          }
 
-         template <typename T>
-         void send(uint32_t session_id, uint32_t msg_type, T && msg) {
-            custom_message mess(msg_type, std::move(msg));
+         void send(uint32_t session_id, uint32_t msg_type, const vector<char> & msg) {
+            custom_message mess{msg_type, msg};
 
             app().get_io_service().post([this, session_id, mess=std::move(mess)] {
                if (_sessions_by_num.find(session_id) != _sessions_by_num.end()) {
@@ -1469,20 +1463,16 @@ namespace eosio {
       }
    }
 
-
-   template <typename T, typename Call>
-   void bnet_plugin::subscribe(uint32_t msg_type, Call && cb) {
-      my->subscribe<T, Call>(msg_type, std::move(cb));
+   void bnet_plugin::subscribe(uint32_t msg_type, std::function<void(uint32_t, const vector<char>&)>&& cb) {
+      my->subscribe(msg_type, std::move(cb));
    }
 
-   template <typename T>
-   void bnet_plugin::bcast(uint32_t msg_type, T && msg) {
-      my->bcast(msg_type, std::move(msg));
+   void bnet_plugin::bcast(uint32_t msg_type, const vector<char> & msg) {
+      my->bcast(msg_type, msg);
    }
 
-   template <typename T>
-   void bnet_plugin::send(uint32_t session_id, uint32_t msg_type, T && msg) {
-      my->send(session_id, msg_type, std::move(msg));
+   void bnet_plugin::send(uint32_t session_id, uint32_t msg_type, const vector<char> & msg) {
+      my->send(session_id, msg_type, msg);
    }
 
    void bnet_plugin::plugin_shutdown() {
