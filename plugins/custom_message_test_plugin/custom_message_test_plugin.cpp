@@ -163,11 +163,7 @@ struct custom_message_test_plugin_impl {
 custom_message_test_plugin::custom_message_test_plugin() {}
 custom_message_test_plugin::~custom_message_test_plugin() {}
 
-void custom_message_test_plugin::set_program_options(options_description&, options_description& cfg) {
-   // cfg.add_options()
-   //    ("txn-reference-block-lag", bpo::value<int32_t>()->default_value(0), "Lag in number of blocks from the head block when selecting the reference block for transactions (-1 means Last Irreversible Block)")
-   // ;
-}
+void custom_message_test_plugin::set_program_options(options_description&, options_description& cfg) { }
 
 void custom_message_test_plugin::plugin_initialize(const variables_map& options) {
    try {
@@ -186,7 +182,6 @@ void custom_message_test_plugin::plugin_startup() {
    wlog("Custom message test plugin started");
 }
 
-void custom_message_test_plugin::plugin_shutdown() {
-}
+void custom_message_test_plugin::plugin_shutdown() { }
 
 }
