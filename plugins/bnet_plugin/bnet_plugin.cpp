@@ -170,12 +170,19 @@ struct pong {
 };
 FC_REFLECT( pong, (sent)(code) )
 
+struct custom_message {
+   uint32_t type;
+   vector<char> data;
+};
+FC_REFLECT( custom_message, (type)(data) )
+
 using bnet_message = fc::static_variant<hello,
                                         trx_notice,
                                         block_notice,
                                         signed_block_ptr,
                                         packed_transaction_ptr,
-                                        ping, pong
+                                        ping, pong,
+                                        custom_message
                                         >;
 
 
@@ -942,6 +949,9 @@ namespace eosio {
                  case bnet_message::tag<pong>::value:
                     on( msg.get<pong>() );
                     break;
+                 case bnet_message::tag<custom_message>::value:
+                    on( msg.get<custom_message>() );
+                    break;
                  default:
                     wlog( "bad message received" );
                     _ws->close( boost::beast::websocket::close_code::bad_payload );
@@ -979,6 +989,8 @@ namespace eosio {
            }
            _last_sent_ping.code = fc::sha256();
         }
+
+        void on( const custom_message& msg );
 
         void do_goodbye( const string& reason ) {
            try {
@@ -1126,6 +1138,9 @@ namespace eosio {
 
    class bnet_plugin_impl : public std::enable_shared_from_this<bnet_plugin_impl> {
       public:
+         using CustomHandler = std::function<void (uint32_t, const vector<char>&)>;
+
+      public:
          bnet_plugin_impl() = default;
 
          const private_key_type  _peer_pk = fc::crypto::private_key::generate(); /// one time random key to identify this process
@@ -1143,6 +1158,8 @@ namespace eosio {
          std::shared_ptr<listener>                              _listener;
          std::shared_ptr<boost::asio::deadline_timer>           _timer;    // only access on app io_service
          std::map<const session*, std::weak_ptr<session> >      _sessions; // only access on app io_service
+         std::map<uint32_t, const session* >                    _sessions_by_num;
+         std::map<uint32_t, std::vector<CustomHandler>>         _custom_handlers;
 
          channels::irreversible_block::channel_type::handle     _on_irb_handle;
          channels::accepted_block::channel_type::handle         _on_accepted_block_handle;
@@ -1150,18 +1167,57 @@ namespace eosio {
          channels::rejected_block::channel_type::handle         _on_bad_block_handle;
          channels::accepted_transaction::channel_type::handle   _on_appled_trx_handle;
 
-         void async_add_session( std::weak_ptr<session> wp ) {
-            app().post(priority::low, [wp,this]{
-               if( auto l = wp.lock() ) {
-                  _sessions[l.get()] = wp;
+         void subscribe(uint32_t msg_type, CustomHandler && cb) {
+            if (_custom_handlers.find(msg_type) == _custom_handlers.end()) {
+               vector<CustomHandler> vec = { std::move(cb) };
+               _custom_handlers.insert(std::make_pair(msg_type, std::move(vec)));
+            }
+            else {
+               _custom_handlers[msg_type].push_back(std::move(cb));
+            }
+         }
+
+         void bcast(uint32_t msg_type, const vector<char>& msg) {
+            custom_message mess {msg_type, msg};
+
+            for_each_session([mess = std::move(mess), msg_type]( auto ses ) {
+               ses->send(mess);
+            });
+         }
+
+         void send(uint32_t session_id, uint32_t msg_type, const vector<char> & msg) {
+            custom_message mess{msg_type, msg};
+
+            app().get_io_service().post([this, session_id, mess=std::move(mess)] {
+               elog("ses by num, num: ${num}, size: ${size}", ("num", session_id)("size", _sessions_by_num.size()));
+               if (_sessions_by_num.find(session_id) != _sessions_by_num.end()) {
+                  auto ses_wptr = _sessions[_sessions_by_num[session_id]];
+                  if (auto ses = ses_wptr.lock()) {
+                     ses->_ios.post(boost::asio::bind_executor(
+                           ses->_strand,
+                           [ses, mess=std::move(mess)]() { ses->send(mess); }
+                     ));
+                  }
                }
             });
          }
 
-         void on_session_close( const session* s ) {
+         void async_add_session( std::weak_ptr<session> wp ) {
+            app().post(priority::low, [wp,this]{
+               if( auto l = wp.lock() ) {
+                  _sessions[l.get()] = wp;
+                  _sessions_by_num[l->_session_num] = l.get();
+               }
+            });
+         }
+
+         void on_session_close( const session* s, uint32_t session_num ) {
+            verify_strand_in_this_thread(app().get_io_service().get_executor(), __func__, __LINE__);
             auto itr = _sessions.find(s);
-            if( _sessions.end() != itr )
+            if( _sessions.end() != itr ) {
                _sessions.erase(itr);
+               _sessions_by_num.erase(session_num);
+            }
          }
 
          template<typename Call>
@@ -1237,6 +1293,7 @@ namespace eosio {
                    auto s = std::make_shared<session>( *_ioc, shared_from_this() );
                    s->_local_peer_id = _peer_id;
                    _sessions[s.get()] = s;
+                   _sessions_by_num[s->_session_num] = s.get();
                    s->run( peer );
                 }
              }
@@ -1405,8 +1462,21 @@ namespace eosio {
          auto s = std::make_shared<session>( ioc, my );
          s->_local_peer_id = my->_peer_id;
          my->_sessions[s.get()] = s;
+         my->_sessions_by_num[s->_session_num] = s.get();
          s->run( peer );
       }
+   }
+
+   void bnet_plugin::subscribe(uint32_t msg_type, std::function<void(uint32_t, const vector<char>&)>&& cb) {
+      my->subscribe(msg_type, std::move(cb));
+   }
+
+   void bnet_plugin::bcast(uint32_t msg_type, const vector<char> & msg) {
+      my->bcast(msg_type, msg);
+   }
+
+   void bnet_plugin::send(uint32_t session_id, uint32_t msg_type, const vector<char> & msg) {
+      my->send(session_id, msg_type, msg);
    }
 
    void bnet_plugin::plugin_shutdown() {
@@ -1448,10 +1518,24 @@ namespace eosio {
    session::~session() {
      wlog( "close session ${n}",("n",_session_num) );
      std::weak_ptr<bnet_plugin_impl> netp = _net_plugin;
-      app().post(priority::low, [netp,ses=this]{
+     _app_ios.post( [netp,ses=this, session_num=this->_session_num]{
         if( auto net = netp.lock() )
-           net->on_session_close(ses);
+           net->on_session_close(ses, session_num);
      });
+   }
+
+
+   void session::on( const custom_message& msg ) {
+      peer_wlog(this, "received custom message with type ${type}", ("type", msg.type));
+      auto handler_itr = _net_plugin->_custom_handlers.find(msg.type);
+      if (handler_itr != _net_plugin->_custom_handlers.end()) {
+         for (auto && cb: handler_itr->second) {
+            cb(_session_num, msg.data);
+         }
+      }
+      else {
+         peer_wlog(this, "Handler not found for custom message with type ${type}", ("type", msg.type));
+      }
    }
 
    void session::do_hello() {

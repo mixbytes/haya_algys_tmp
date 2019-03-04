@@ -46,6 +46,26 @@ class bnet_plugin : public plugin<bnet_plugin> {
       void plugin_shutdown();
       void handle_sighup() override;
 
+      template <typename T, typename Call>
+      void subscribe(uint32_t msg_type, Call && cb) {
+         subscribe(msg_type, [cb = std::move(cb)](uint32_t session_num, const vector<char> &raw_msg) {
+            cb(session_num, fc::raw::unpack<T>(raw_msg));
+         });
+      }
+      void subscribe(uint32_t msg_type, std::function<void(uint32_t, const vector<char>&)>&&);
+
+      template <typename T>
+      void bcast(uint32_t msg_type, const T & msg) {
+         bcast(msg_type, fc::raw::pack(msg));
+      }
+      void bcast(uint32_t msg_type, const vector<char>&);
+
+      template <typename T>
+      void send(uint32_t session_id, uint32_t msg_type, const T & msg) {
+         send(session_id, msg_type, fc::raw::pack(msg));
+      }
+      void send(uint32_t session_id, uint32_t msg_type, const vector<char>&);
+
    private:
       bnet_ptr my;
 };
