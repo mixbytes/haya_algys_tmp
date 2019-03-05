@@ -9,7 +9,6 @@
 #include <fc/exception/exception.hpp>
 #include <fc/reflect/reflect.hpp>
 #include <fc/reflect/variant.hpp>
-#include <fc/io/json.hpp>
 #include <thread>
 
 namespace fc {
@@ -74,12 +73,20 @@ struct custom_message_test_plugin_impl {
       app().get_plugin<bnet_plugin>().bcast(string_message_type, msg);
    }
 
+   void bcast_default_message(uint32_t type) {
+      app().get_plugin<bnet_plugin>().bcast(type, std::string("default msg bcast"));
+   }
+
    void send_struct_message(uint32_t ses_id, const struct_message & msg) {
       app().get_plugin<bnet_plugin>().send(ses_id, struct_message_type, msg);
    }
 
    void send_string_message(uint32_t ses_id, const string_message & msg) {
       app().get_plugin<bnet_plugin>().send(ses_id, string_message_type, msg);
+   }
+
+   void send_default_message(uint32_t ses_id, uint32_t type) {
+      app().get_plugin<bnet_plugin>().send(ses_id, type, std::string("default msg send"));
    }
 
    void bcast(uint32_t type, const variant& var) {
@@ -94,6 +101,7 @@ struct custom_message_test_plugin_impl {
                break;
 
             default:
+               bcast_default_message(type);
                break;
          }
 
@@ -119,6 +127,7 @@ struct custom_message_test_plugin_impl {
                break;
 
             default:
+               send_default_message(session_id, type);
                break;
          }
 
