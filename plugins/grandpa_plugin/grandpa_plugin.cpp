@@ -2,9 +2,12 @@
 #include <eosio/chain/plugin_interface.hpp>
 #include <fc/io/json.hpp>
 #include <queue>
+#include <chrono>
 
 
 namespace eosio {
+
+using namespace std::chrono_literals;
 
 static appbase::abstract_plugin& _grandpa_plugin = app().register_plugin<grandpa_plugin>();
 
@@ -26,6 +29,10 @@ public:
 
     std::queue<grandpa_message_ptr> _message_queue {};
     std::mutex _message_queue_mutex;
+    bool _need_notify = true;
+    std::condition_variable _new_msg_cond;
+    std::unique_ptr<std::thread> _thread_ptr;
+    bool _done = false;
 
     template <typename T>
     void subscribe() {
@@ -36,6 +43,10 @@ public:
             mutex_guard lock(_message_queue_mutex);
 
             _message_queue.push(std::make_shared<grandpa_message>(msg));
+
+            if (_need_notify) {
+                _new_msg_cond.notify_one();
+            }
 
             dlog("Grandpa message received, ses_id: ${ses_id}, type: ${type}, msg: ${msg}",
                 ("ses_id", ses_id)
@@ -53,8 +64,12 @@ public:
     grandpa_message_ptr get_next_msg() {
         mutex_guard lock(_message_queue_mutex);
 
-        if (!_message_queue.size())
+        if (!_message_queue.size()) {
+            _need_notify = true;
             return nullptr;
+        } else {
+            _need_notify = false;
+        }
 
         auto msg = _message_queue.front();
         _message_queue.pop();
@@ -62,6 +77,67 @@ public:
         return msg;
     }
 
+    grandpa_message_ptr get_next_msg_wait() {
+        while (true) {
+            if (_need_notify) {
+                std::unique_lock<std::mutex> lk(_message_queue_mutex);
+
+                _new_msg_cond.wait(lk, [this](){
+                    return (bool)_message_queue.size() || _done;
+                });
+            }
+
+            if (_done)
+                return nullptr;
+
+            auto msg = get_next_msg();
+
+            if (msg) {
+                return msg;
+            }
+        }
+    }
+
+    void loop() {
+        while (true) {
+            auto msg = get_next_msg_wait();
+
+            if (_done) {
+                break;
+            }
+
+            dlog("Granpa message processing started, type: ${type}",
+                ("type", message_types_base + msg->which())
+            );
+
+            process_msg(msg);
+        }
+    }
+
+    void stop() {
+        _done = true;
+        _new_msg_cond.notify_one();
+        _thread_ptr->join();
+    }
+
+    // need handle all messages
+    void process_msg(grandpa_message_ptr msg_ptr) {
+        auto msg = *msg_ptr;
+        switch (msg.which()) {
+            case grandpa_message::tag<test_message>::value:
+                on(msg.get<test_message>());
+                break;
+            default:
+                ilog("Grandpa message received, but handler not found, type: ${type}",
+                    ("type", message_types_base + msg.which())
+                );
+                break;
+        }
+    }
+
+    void on(const test_message & msg) {
+        dlog("Grandpa test message received, msg: ${msg}", ("msg", msg));
+    }
 };
 
 
@@ -76,10 +152,16 @@ void grandpa_plugin::plugin_initialize(const variables_map& options) {
 
 void grandpa_plugin::plugin_startup() {
    my->subscribe();
+
+   my->_thread_ptr.reset(new std::thread([this]() {
+       wlog("Grandpa thread started");
+       my->loop();
+       wlog("Grandpa thread terminated");
+    }));
 }
 
 void grandpa_plugin::plugin_shutdown() {
-   // OK, that's enough magic
+    my->stop();
 }
 
 }
