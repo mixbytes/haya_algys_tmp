@@ -925,7 +925,7 @@ namespace eosio {
          * the connection from being closed.
          */
         void wait_on_app() {
-            app().get_io_service().post( 
+            app().get_io_service().post(
                 boost::asio::bind_executor( _strand, [self=shared_from_this()]{ self->do_read(); } )
             );
         }
@@ -1191,7 +1191,7 @@ namespace eosio {
             custom_message mess{msg_type, msg};
 
             app().get_io_service().post([this, session_id, mess=std::move(mess)] {
-               elog("ses by num, num: ${num}, size: ${size}", ("num", session_id)("size", _sessions_by_num.size()));
+               dlog("ses by num, num: ${num}, size: ${size}", ("num", session_id)("size", _sessions_by_num.size()));
                if (_sessions_by_num.find(session_id) != _sessions_by_num.end()) {
                   auto ses_wptr = _sessions[_sessions_by_num[session_id]];
                   if (auto ses = ses_wptr.lock()) {
@@ -1525,7 +1525,7 @@ namespace eosio {
 
 
    void session::on( const custom_message& msg ) {
-      peer_wlog(this, "received custom message with type ${type}", ("type", msg.type));
+      peer_ilog(this, "received custom message with type ${type}", ("type", msg.type));
       auto handler_itr = _net_plugin->_custom_handlers.find(msg.type);
       if (handler_itr != _net_plugin->_custom_handlers.end()) {
          for (auto && cb: handler_itr->second) {
@@ -1533,7 +1533,7 @@ namespace eosio {
          }
       }
       else {
-         peer_wlog(this, "Handler not found for custom message with type ${type}", ("type", msg.type));
+         peer_ilog(this, "Handler not found for custom message with type ${type}", ("type", msg.type));
       }
    }
 
