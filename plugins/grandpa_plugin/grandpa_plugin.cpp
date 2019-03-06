@@ -123,8 +123,7 @@ public:
     // need handle all messages
     void process_msg(grandpa_message_ptr msg_ptr) {
         auto msg = *msg_ptr;
-        switch (msg.which())
-        {
+        switch (msg.which()) {
             case grandpa_message::tag<test_message>::value:
                 on(msg.get<test_message>());
                 break;
