@@ -8,6 +8,7 @@
 namespace eosio {
 
 using namespace std::chrono_literals;
+using namespace eosio::chain;
 
 static appbase::abstract_plugin& _grandpa_plugin = app().register_plugin<grandpa_plugin>();
 
@@ -112,6 +113,12 @@ public:
 
             process_msg(msg);
         }
+    }
+
+    void do_bft_finalize(const block_id_type& block_id) {
+        app().get_io_service().post([this, bid = block_id]() {
+            app().get_plugin<chain_plugin>().chain().bft_finalize(bid);
+        });
     }
 
     void stop() {
