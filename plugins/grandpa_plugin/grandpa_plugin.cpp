@@ -1,9 +1,9 @@
 #include <eosio/grandpa_plugin/grandpa_plugin.hpp>
+#include <eosio/grandpa_plugin/network_messages.hpp>
 #include <eosio/chain/plugin_interface.hpp>
 #include <fc/io/json.hpp>
 #include <queue>
 #include <chrono>
-
 
 namespace eosio {
 
@@ -14,11 +14,12 @@ static appbase::abstract_plugin& _grandpa_plugin = app().register_plugin<grandpa
 
 static constexpr uint32_t message_types_base = 100;
 
+using ::fc::static_variant;
+using std::shared_ptr;
+
 using test_message = std::string;
-
-using grandpa_message = ::fc::static_variant<test_message>;
-using grandpa_message_ptr = std::shared_ptr<grandpa_message>;
-
+using grandpa_message = static_variant<test_message, chain_conf_msg, block_get_conf_msg, handshake_msg>;
+using grandpa_message_ptr = shared_ptr<grandpa_message>;
 
 class grandpa_plugin_impl {
 public:
@@ -127,6 +128,15 @@ public:
             case grandpa_message::tag<test_message>::value:
                 on(msg.get<test_message>());
                 break;
+            case grandpa_message::tag<chain_conf_msg>::value:
+                on(msg.get<chain_conf_msg>());
+                break;
+            case grandpa_message::tag<block_get_conf_msg>::value:
+                on(msg.get<block_get_conf_msg>());
+                break;
+            case grandpa_message::tag<handshake_msg>::value:
+                on(msg.get<handshake_msg>());
+                break;
             default:
                 ilog("Grandpa message received, but handler not found, type: ${type}",
                     ("type", message_types_base + msg.which())
@@ -137,6 +147,18 @@ public:
 
     void on(const test_message & msg) {
         dlog("Grandpa test message received, msg: ${msg}", ("msg", msg));
+    }
+
+    void on(const chain_conf_msg& msg) {
+        dlog("Grandpa chain_conf_msg received, msg: ${msg}", ("msg", msg));
+    }
+
+    void on(const block_get_conf_msg& msg) {
+        dlog("Grandpa block_get_conf received, msg: ${msg}", ("msg", msg));
+    }
+
+    void on(const handshake_msg& msg) {
+        dlog("Grandpa handshake_msg received, msg: ${msg}", ("msg", msg));
     }
 };
 
