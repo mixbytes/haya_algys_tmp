@@ -664,7 +664,9 @@ struct controller_impl {
                                                                              conf.genesis.initial_timestamp );
    }
 
-
+   void bft_finalize(const block_id_type& block_id) {
+      fork_db.bft_finalize( block_id );
+   }
 
    /**
     * @post regardless of the success of commit block there is no active pending block
@@ -1803,6 +1805,10 @@ transaction_trace_ptr controller::push_scheduled_transaction( const transaction_
 {
    validate_db_available_size();
    return my->push_scheduled_transaction( trxid, deadline, billed_cpu_time_us, billed_cpu_time_us > 0 );
+}
+
+void controller::bft_finalize(const block_id_type& block_id) {
+   my->bft_finalize(block_id);
 }
 
 const flat_set<account_name>& controller::get_actor_whitelist() const {

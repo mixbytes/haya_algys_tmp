@@ -278,6 +278,8 @@ namespace eosio { namespace chain {
             return pretty_output;
          }
 
+         void bft_finalize(const block_id_type& block_id);
+
       private:
          friend class apply_context;
          friend class transaction_context;

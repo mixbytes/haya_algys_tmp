@@ -110,7 +110,7 @@ namespace eosio { namespace chain {
 
    void fork_database::set( block_state_ptr s ) {
       auto result = my->index.insert( s );
-      EOS_ASSERT( s->id == s->header.id(), fork_database_exception, 
+      EOS_ASSERT( s->id == s->header.id(), fork_database_exception,
                   "block state id (${id}) is different from block state header id (${hid})", ("id", string(s->id))("hid", string(s->header.id())) );
 
          //FC_ASSERT( s->block_num == s->header.block_num() );
@@ -196,8 +196,8 @@ namespace eosio { namespace chain {
          result.second.push_back(second_branch);
          first_branch = get_block( first_branch->header.previous );
          second_branch = get_block( second_branch->header.previous );
-         EOS_ASSERT( first_branch && second_branch, fork_db_block_not_found, 
-                     "either block ${fid} or ${sid} does not exist", 
+         EOS_ASSERT( first_branch && second_branch, fork_db_block_not_found,
+                     "either block ${fid} or ${sid} does not exist",
                      ("fid", string(first_branch->header.previous))("sid", string(second_branch->header.previous)) );
       }
 
@@ -305,6 +305,20 @@ namespace eosio { namespace chain {
       if( b->bft_irreversible_blocknum < b->block_num &&
          b->confirmations.size() >= ((b->active_schedule.producers.size() * 2) / 3 + 1) ) {
          set_bft_irreversible( c.block_id );
+      }
+   }
+
+   // need to check confirmations before call this method
+   void fork_database::bft_finalize( const block_id_type& block_id ) {
+      auto b = get_block( block_id );
+      EOS_ASSERT( b, fork_db_block_not_found, "unable to find block id ${id}", ("id",block_id));
+
+      set_bft_irreversible( block_id );
+
+      auto oldest = *my->index.get<by_block_num>().begin();
+
+      if (oldest->block_num < b->block_num) {
+         prune ( b );
       }
    }
 
