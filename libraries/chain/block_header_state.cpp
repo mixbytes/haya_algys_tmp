@@ -23,7 +23,7 @@ namespace eosio { namespace chain {
       /// 2/3 must be greater, so if I go 1/3 into the list sorted from low to high, then 2/3 are greater
 
       if( blocknums.size() == 0 ) return 0;
-      /// TODO: update to nth_element 
+      /// TODO: update to nth_element
       std::sort( blocknums.begin(), blocknums.end() );
       return blocknums[ (blocknums.size()-1) / 3 ];
    }
@@ -44,11 +44,11 @@ namespace eosio { namespace chain {
     result.header.timestamp                                = when;
     result.header.previous                                 = id;
     result.header.schedule_version                         = active_schedule.version;
-                                                           
+
     auto prokey                                            = get_scheduled_producer(when);
     result.block_signing_key                               = prokey.block_signing_key;
     result.header.producer                                 = prokey.producer_name;
-                                                           
+
     result.pending_schedule_lib_num                        = pending_schedule_lib_num;
     result.pending_schedule_hash                           = pending_schedule_hash;
     result.block_num                                       = block_num + 1;
@@ -64,7 +64,7 @@ namespace eosio { namespace chain {
     result.bft_irreversible_blocknum             = bft_irreversible_blocknum;
 
     result.producer_to_last_implied_irb[prokey.producer_name] = result.dpos_proposed_irreversible_blocknum;
-    result.dpos_irreversible_blocknum                         = result.calc_dpos_last_irreversible(); 
+    result.dpos_irreversible_blocknum                         = result.calc_dpos_last_irreversible();
 
     /// grow the confirmed count
     static_assert(std::numeric_limits<uint8_t>::max() >= (config::max_producers * 2 / 3) + 1, "8bit confirmations may not be able to hold all of the needed confirmations");

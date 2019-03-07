@@ -3,5 +3,5 @@ add_library( grandpa_plugin
              grandpa_plugin.cpp
              ${HEADERS} )
 
-target_link_libraries( grandpa_plugin appbase fc bnet_plugin)
+target_link_libraries( grandpa_plugin appbase fc bnet_plugin chain_plugin)
 target_include_directories( grandpa_plugin PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include" )

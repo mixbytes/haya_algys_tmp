@@ -64,6 +64,8 @@ namespace eosio { namespace chain {
          void mark_in_current_chain( const block_state_ptr& h, bool in_current_chain );
          void prune( const block_state_ptr& h );
 
+         void bft_finalize( const block_id_type& id );
+
          /**
           * This signal is emited when a block state becomes irreversible, once irreversible
           * it is removed unless it is the head block.
