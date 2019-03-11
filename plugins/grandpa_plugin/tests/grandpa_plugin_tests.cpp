@@ -1,4 +1,5 @@
 #include <eosio/grandpa_plugin/prefix_chain_tree.hpp>
+#include <eosio/grandpa_plugin/network_messages.hpp>
 #include <fc/crypto/sha256.hpp>
 #include <boost/test/unit_test.hpp>
 #include <eosio/testing/tester.hpp>
@@ -47,6 +48,28 @@ BOOST_AUTO_TEST_CASE(prefix_chain_) try {
     expected = vector<prefix_node_ptr>{chain_first_node};
     BOOST_TEST(expected == tree.get_final(2));
 
+
+} FC_LOG_AND_RETHROW()
+
+BOOST_AUTO_TEST_SUITE_END()
+
+
+BOOST_AUTO_TEST_SUITE(confirmation_tests)
+
+BOOST_AUTO_TEST_CASE(confirmation_) try {
+    auto priv_key = private_key::generate();
+    auto pub_key = priv_key.get_public_key();
+
+    auto chain = chain_type {
+        fc::sha256("a"),
+        { fc::sha256("b"), fc::sha256("c"), fc::sha256("d") }
+    };
+
+    auto conf_msg = make_confirmation(chain, priv_key);
+
+    BOOST_TEST(chain.base_block == conf_msg->base_block);
+    BOOST_TEST(chain.blocks == conf_msg->blocks);
+    BOOST_TEST(true == validate_confirmation(*conf_msg, pub_key));
 
 } FC_LOG_AND_RETHROW()
 
