@@ -52,11 +52,14 @@ public:
     std::map<uint32_t, peer_info> _peers;
 
     template <typename T>
-    void subscribe() {
-        auto msg_type = message_types_base + grandpa_message::tag<T>::value;
+    static constexpr uint32_t get_msg_type() {
+        return message_types_base + grandpa_message::tag<T>::value;
+    }
 
-        app().get_plugin<bnet_plugin>().subscribe<T>(msg_type,
-        [this, msg_type](uint32_t ses_id, const T & msg) {
+    template <typename T>
+    void subscribe() {
+        app().get_plugin<bnet_plugin>().subscribe<T>(get_msg_type<T>(),
+        [this](uint32_t ses_id, const T & msg) {
             mutex_guard lock(_message_queue_mutex);
 
             _message_queue.push(std::make_pair(ses_id, std::make_shared<grandpa_message>(msg)));
@@ -67,7 +70,7 @@ public:
 
             dlog("Grandpa message received, ses_id: ${ses_id}, type: ${type}, msg: ${msg}",
                 ("ses_id", ses_id)
-                ("type", msg_type)
+                ("type", get_msg_type<T>())
                 ("msg", fc::json::to_string(fc::variant(msg)))
             );
         });
@@ -83,13 +86,13 @@ public:
     template <typename T>
     void send(uint32_t ses_id, const T & msg) {
         app().get_plugin<bnet_plugin>()
-            .send(ses_id, message_types_base + grandpa_message::tag<T>::value, grandpa_message {msg} );
+            .send(ses_id, get_msg_type<T>(), grandpa_message {msg} );
     }
 
     template <typename T>
     void bcast(const T & msg) {
         app().get_plugin<bnet_plugin>()
-            .bcast(message_types_base + grandpa_message::tag<T>::value, grandpa_message {msg} );
+            .bcast(get_msg_type<T>(), grandpa_message {msg} );
     }
 
     optional<grandpa_message_pair> get_next_msg() {
