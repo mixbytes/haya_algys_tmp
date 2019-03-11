@@ -1,5 +1,6 @@
 #include <eosio/grandpa_plugin/grandpa_plugin.hpp>
 #include <eosio/grandpa_plugin/network_messages.hpp>
+#include <eosio/grandpa_plugin/prefix_chain_tree.hpp>
 #include <eosio/chain/plugin_interface.hpp>
 #include <fc/io/json.hpp>
 #include <queue>
@@ -17,11 +18,21 @@ static constexpr uint32_t message_types_base = 100;
 
 using ::fc::static_variant;
 using std::shared_ptr;
+using std::unique_ptr;
+using std::pair;
 using chain::private_key_type;
 using chain::public_key_type;
 
 using grandpa_message = static_variant<chain_conf_msg, block_get_conf_msg, handshake_msg>;
 using grandpa_message_ptr = shared_ptr<grandpa_message>;
+using grandpa_message_pair = pair<uint32_t, grandpa_message_ptr>;
+using prefix_chain_tree_ptr = unique_ptr<prefix_chain_tree>;
+
+struct peer_info {
+    public_key_type public_key;
+    uint64_t lib_num;
+    block_id_type lib_id;
+};
 
 class grandpa_plugin_impl {
 public:
@@ -30,13 +41,15 @@ public:
 public:
     grandpa_plugin_impl() {}
 
-    std::queue<grandpa_message_ptr> _message_queue {};
+    std::queue<grandpa_message_pair> _message_queue {};
     std::mutex _message_queue_mutex;
     bool _need_notify = true;
     std::condition_variable _new_msg_cond;
     std::unique_ptr<std::thread> _thread_ptr;
     bool _done = false;
     private_key_type _private_key;
+    prefix_chain_tree_ptr _prefix_tree_ptr;
+    std::map<uint32_t, peer_info> _peers;
 
     template <typename T>
     void subscribe() {
@@ -46,7 +59,7 @@ public:
         [this, msg_type](uint32_t ses_id, const T & msg) {
             mutex_guard lock(_message_queue_mutex);
 
-            _message_queue.push(std::make_shared<grandpa_message>(msg));
+            _message_queue.push(std::make_pair(ses_id, std::make_shared<grandpa_message>(msg)));
 
             if (_need_notify) {
                 _new_msg_cond.notify_one();
@@ -67,12 +80,24 @@ public:
         subscribe<handshake_msg>();
     }
 
-    grandpa_message_ptr get_next_msg() {
+    template <typename T>
+    void send(uint32_t ses_id, const T & msg) {
+        app().get_plugin<bnet_plugin>()
+            .send(ses_id, message_types_base + grandpa_message::tag<T>::value, grandpa_message {msg} );
+    }
+
+    template <typename T>
+    void bcast(const T & msg) {
+        app().get_plugin<bnet_plugin>()
+            .bcast(message_types_base + grandpa_message::tag<T>::value, grandpa_message {msg} );
+    }
+
+    optional<grandpa_message_pair> get_next_msg() {
         mutex_guard lock(_message_queue_mutex);
 
         if (!_message_queue.size()) {
             _need_notify = true;
-            return nullptr;
+            return {};
         } else {
             _need_notify = false;
         }
@@ -83,7 +108,7 @@ public:
         return msg;
     }
 
-    grandpa_message_ptr get_next_msg_wait() {
+    optional<grandpa_message_pair> get_next_msg_wait() {
         while (true) {
             if (_need_notify) {
                 std::unique_lock<std::mutex> lk(_message_queue_mutex);
@@ -94,7 +119,7 @@ public:
             }
 
             if (_done)
-                return nullptr;
+                return {};
 
             auto msg = get_next_msg();
 
@@ -112,11 +137,12 @@ public:
                 break;
             }
 
-            dlog("Granpa message processing started, type: ${type}",
-                ("type", message_types_base + msg->which())
+            dlog("Granpa message processing started, type: ${type}, session: ${ses_id}",
+                ("type", message_types_base + msg->second->which())
+                ("ses_id", msg->first)
             );
 
-            process_msg(msg);
+            process_msg(msg->first, msg->second);
         }
     }
 
@@ -133,17 +159,17 @@ public:
     }
 
     // need handle all messages
-    void process_msg(grandpa_message_ptr msg_ptr) {
+    void process_msg(uint32_t ses_id, grandpa_message_ptr msg_ptr) {
         auto msg = *msg_ptr;
         switch (msg.which()) {
             case grandpa_message::tag<chain_conf_msg>::value:
-                on(msg.get<chain_conf_msg>());
+                on(ses_id, msg.get<chain_conf_msg>());
                 break;
             case grandpa_message::tag<block_get_conf_msg>::value:
-                on(msg.get<block_get_conf_msg>());
+                on(ses_id, msg.get<block_get_conf_msg>());
                 break;
             case grandpa_message::tag<handshake_msg>::value:
-                on(msg.get<handshake_msg>());
+                on(ses_id, msg.get<handshake_msg>());
                 break;
             default:
                 ilog("Grandpa message received, but handler not found, type: ${type}",
@@ -153,15 +179,15 @@ public:
         }
     }
 
-    void on(const chain_conf_msg& msg) {
+    void on(uint32_t ses_id, const chain_conf_msg& msg) {
         dlog("Grandpa chain_conf_msg received, msg: ${msg}", ("msg", msg));
     }
 
-    void on(const block_get_conf_msg& msg) {
+    void on(uint32_t ses_id, const block_get_conf_msg& msg) {
         dlog("Grandpa block_get_conf received, msg: ${msg}", ("msg", msg));
     }
 
-    void on(const handshake_msg& msg) {
+    void on(uint32_t ses_id, const handshake_msg& msg) {
         dlog("Grandpa handshake_msg received, msg: ${msg}", ("msg", msg));
     }
 };
