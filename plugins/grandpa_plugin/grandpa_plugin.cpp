@@ -17,9 +17,10 @@ static constexpr uint32_t message_types_base = 100;
 
 using ::fc::static_variant;
 using std::shared_ptr;
+using chain::private_key_type;
+using chain::public_key_type;
 
-using test_message = std::string;
-using grandpa_message = static_variant<test_message, chain_conf_msg, block_get_conf_msg, handshake_msg>;
+using grandpa_message = static_variant<chain_conf_msg, block_get_conf_msg, handshake_msg>;
 using grandpa_message_ptr = shared_ptr<grandpa_message>;
 
 class grandpa_plugin_impl {
@@ -35,6 +36,7 @@ public:
     std::condition_variable _new_msg_cond;
     std::unique_ptr<std::thread> _thread_ptr;
     bool _done = false;
+    private_key_type _private_key;
 
     template <typename T>
     void subscribe() {
@@ -60,7 +62,9 @@ public:
 
     //need subscribe for all grandpa message types
     void subscribe() {
-        subscribe<test_message>();
+        subscribe<chain_conf_msg>();
+        subscribe<block_get_conf_msg>();
+        subscribe<handshake_msg>();
     }
 
     grandpa_message_ptr get_next_msg() {
@@ -132,9 +136,6 @@ public:
     void process_msg(grandpa_message_ptr msg_ptr) {
         auto msg = *msg_ptr;
         switch (msg.which()) {
-            case grandpa_message::tag<test_message>::value:
-                on(msg.get<test_message>());
-                break;
             case grandpa_message::tag<chain_conf_msg>::value:
                 on(msg.get<chain_conf_msg>());
                 break;
@@ -150,10 +151,6 @@ public:
                 );
                 break;
         }
-    }
-
-    void on(const test_message & msg) {
-        dlog("Grandpa test message received, msg: ${msg}", ("msg", msg));
     }
 
     void on(const chain_conf_msg& msg) {
@@ -173,19 +170,32 @@ public:
 grandpa_plugin::grandpa_plugin():my(new grandpa_plugin_impl()){}
 grandpa_plugin::~grandpa_plugin(){}
 
-void grandpa_plugin::set_program_options(options_description&, options_description& cfg) {
+void grandpa_plugin::set_program_options(options_description& /*cli*/, options_description& cfg) {
+    cfg.add_options()
+        ("private-key", boost::program_options::value<string>(), "Private key for Grandpa finalizer")
+    ;
 }
 
 void grandpa_plugin::plugin_initialize(const variables_map& options) {
+    if( options.count("private-key") ) {
+        auto wif_key = options["private-key"].as<std::string>();
+
+        try {
+            my->_private_key = private_key_type(wif_key);
+        }
+        catch ( fc::exception& e ) {
+            elog("Malformed private key: ${key}", ("key", wif_key));
+        }
+    }
 }
 
 void grandpa_plugin::plugin_startup() {
-   my->subscribe();
+    my->subscribe();
 
-   my->_thread_ptr.reset(new std::thread([this]() {
-       wlog("Grandpa thread started");
-       my->loop();
-       wlog("Grandpa thread terminated");
+    my->_thread_ptr.reset(new std::thread([this]() {
+        wlog("Grandpa thread started");
+        my->loop();
+        wlog("Grandpa thread terminated");
     }));
 }
 
