@@ -11,6 +11,7 @@ namespace eosio {
 
 using namespace std::chrono_literals;
 using namespace eosio::chain;
+using namespace eosio::chain::plugin_interface;
 
 static appbase::abstract_plugin& _grandpa_plugin = app().register_plugin<grandpa_plugin>();
 
@@ -71,6 +72,21 @@ public:
     prefix_chain_tree_ptr _prefix_tree_ptr;
     std::map<uint32_t, peer_info> _peers;
 
+    channels::irreversible_block::channel_type::handle _on_irb_handle;
+    channels::accepted_block::channel_type::handle _on_accepted_block_handle;
+
+    template <typename T>
+    void push_message(const T& msg) {
+        mutex_guard lock(_message_queue_mutex);
+
+        auto grandpa_msg = std::make_shared<grandpa_message>(msg);
+        _message_queue.push(grandpa_msg);
+
+        if (_need_notify) {
+            _new_msg_cond.notify_one();
+        }
+    }
+
     template <typename T>
     static constexpr uint32_t get_net_msg_type() {
         return net_message_types_base + grandpa_net_msg_data::tag<T>::value;
@@ -80,14 +96,7 @@ public:
     void subscribe() {
         app().get_plugin<bnet_plugin>().subscribe<T>(get_net_msg_type<T>(),
         [this](uint32_t ses_id, const T & msg) {
-            mutex_guard lock(_message_queue_mutex);
-
-            auto grandpa_msg = std::make_shared<grandpa_message>(grandpa_net_msg { ses_id, msg });
-            _message_queue.push(grandpa_msg);
-
-            if (_need_notify) {
-                _new_msg_cond.notify_one();
-            }
+            push_message(grandpa_net_msg { ses_id, msg });
 
             dlog("Grandpa network message received, ses_id: ${ses_id}, type: ${type}, msg: ${msg}",
                 ("ses_id", ses_id)
@@ -106,16 +115,10 @@ public:
 
     template <typename T>
     void post_event(const T& event) {
-        mutex_guard lock(_message_queue_mutex);
+        auto ev = grandpa_event { event };
+        push_message(ev);
 
-        auto grandpa_msg = std::make_shared<grandpa_message>(grandpa_event { event });
-        _message_queue.push(grandpa_msg);
-
-        if (_need_notify) {
-            _new_msg_cond.notify_one();
-        }
-
-        dlog("Grandpa event posted, type: ${type}", ("type", grandpa_event_data::tag<T>::value));
+        dlog("Grandpa event posted, type: ${type}", ("type", ev.data.which()));
     }
 
     template <typename T>
@@ -233,7 +236,20 @@ public:
     }
 
     void process_event(const grandpa_event& event) {
-        dlog("Grandpa event received, type: ${type}", ("type", event.data.which()));
+        const auto& data = event.data;
+        switch (data.which()) {
+            case grandpa_event_data::tag<on_accepted_block_event>::value:
+                on(data.get<on_accepted_block_event>());
+                break;
+            case grandpa_event_data::tag<on_irreversible_event>::value:
+                on(data.get<on_irreversible_event>());
+                break;
+            default:
+                ilog("Grandpa event received, but handler not found, type: ${type}",
+                    ("type", data.which())
+                );
+                break;
+        }
     }
 
     void on(uint32_t ses_id, const chain_conf_msg& msg) {
@@ -260,7 +276,7 @@ public:
             auto chain_ptr = std::static_pointer_cast<chain_type>(conf_ptr);
             _prefix_tree_ptr->insert(chain_ptr, peer_itr->second.public_key);
         }
-        catch (fc::exception e) {
+        catch (const fc::exception& e) {
             elog("Grandpa chain insert error, e: ${e}", ("e", e.what()));
             return;
         }
@@ -275,6 +291,14 @@ public:
 
     void on(uint32_t ses_id, const handshake_msg& msg) {
         dlog("Grandpa handshake_msg received, msg: ${msg}", ("msg", msg));
+    }
+
+    void on(const on_accepted_block_event& event) {
+        dlog("Grandpa on_accepted_block_event event handled, block_id: ${bid}", ("bid", event.block_ptr->id));
+    }
+
+    void on(const on_irreversible_event& event) {
+        dlog("Grandpa on_irreversible_event event handled, block_id: ${bid}", ("bid", event.block_ptr->id));
     }
 };
 
@@ -315,6 +339,16 @@ void grandpa_plugin::plugin_startup() {
         my->loop();
         wlog("Grandpa thread terminated");
     }));
+
+    my->_on_accepted_block_handle = app().get_channel<channels::accepted_block>()
+    .subscribe( [this]( block_state_ptr s ) {
+        my->post_event(on_accepted_block_event {s});
+    });
+
+    my->_on_irb_handle = app().get_channel<channels::irreversible_block>()
+    .subscribe( [this]( block_state_ptr s ) {
+        my->post_event(on_irreversible_event {s});
+    });
 }
 
 void grandpa_plugin::plugin_shutdown() {
