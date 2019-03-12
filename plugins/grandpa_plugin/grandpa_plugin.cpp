@@ -6,6 +6,7 @@
 #include <queue>
 #include <chrono>
 #include <atomic>
+#include <fc/exception/exception.hpp>
 
 namespace eosio {
 
@@ -55,7 +56,6 @@ using grandpa_message_ptr = shared_ptr<grandpa_message>;
 
 struct peer_info {
     public_key_type public_key;
-    uint64_t lib_num;
     block_id_type lib_id;
 };
 
@@ -272,7 +272,7 @@ public:
             return;
         }
 
-        if (!validate_confirmation(msg, peer_itr->second.public_key)) {
+        if (!validate_network_msg(msg, peer_itr->second.public_key)) {
             elog("Grandpa confirmation validation fail, ses_id: ${ses_id}",
                 ("ses_id", ses_id)
             );
@@ -280,8 +280,7 @@ public:
         }
 
         try {
-            auto conf_ptr = std::make_shared<chain_conf_msg>(msg);
-            auto chain_ptr = std::static_pointer_cast<chain_type>(conf_ptr);
+            auto chain_ptr = std::make_shared<chain_type>(chain_type { msg.data.base_block, msg.data.blocks, msg.signature });
             _prefix_tree_ptr->insert(chain_ptr, peer_itr->second.public_key);
         }
         catch (const fc::exception& e) {
@@ -320,20 +319,19 @@ grandpa_plugin::~grandpa_plugin(){}
 
 void grandpa_plugin::set_program_options(options_description& /*cli*/, options_description& cfg) {
     cfg.add_options()
-        ("private-key", boost::program_options::value<string>(), "Private key for Grandpa finalizer")
+        ("grandpa-private-key", boost::program_options::value<string>(), "Private key for Grandpa finalizer")
     ;
 }
 
 void grandpa_plugin::plugin_initialize(const variables_map& options) {
-    if( options.count("private-key") ) {
-        auto wif_key = options["private-key"].as<std::string>();
-
-        try {
-            my->_private_key = private_key_type(wif_key);
-        }
-        catch ( fc::exception& e ) {
-            elog("Malformed private key: ${key}", ("key", wif_key));
-        }
+    const auto iterator = options.find("grandpa-private-key");
+    FC_ASSERT(iterator != options.end(), "Argument --grandpa-private-key not provided");
+    auto wif_key = iterator->second.as<std::string>();
+    try {
+        my->_private_key = private_key_type(wif_key);
+    }
+    catch ( fc::exception& e ) {
+        elog("Malformed private key: ${key}", ("key", wif_key));
     }
 }
 

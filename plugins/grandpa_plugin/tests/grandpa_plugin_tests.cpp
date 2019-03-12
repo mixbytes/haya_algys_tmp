@@ -60,16 +60,16 @@ BOOST_AUTO_TEST_CASE(confirmation_) try {
     auto priv_key = private_key::generate();
     auto pub_key = priv_key.get_public_key();
 
-    auto chain = chain_type {
+    auto chain = confirmation_type {
         fc::sha256("a"),
         { fc::sha256("b"), fc::sha256("c"), fc::sha256("d") }
     };
 
-    auto conf_msg = make_confirmation(chain, priv_key);
+    auto conf_msg = make_network_msg(chain, priv_key);
 
-    BOOST_TEST(chain.base_block == conf_msg->base_block);
-    BOOST_TEST(chain.blocks == conf_msg->blocks);
-    BOOST_TEST(true == validate_confirmation(*conf_msg, pub_key));
+    BOOST_TEST(chain.base_block == conf_msg->data.base_block);
+    BOOST_TEST(chain.blocks == conf_msg->data.blocks);
+    BOOST_TEST(true == validate_network_msg(*conf_msg, pub_key));
 
 } FC_LOG_AND_RETHROW()
 
