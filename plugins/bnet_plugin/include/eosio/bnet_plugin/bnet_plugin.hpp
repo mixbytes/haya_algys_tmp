@@ -24,13 +24,13 @@ namespace eosio {
 
 /**
  *  This plugin tracks all actions and keys associated with a set of configured accounts. It enables
- *  wallets to paginate queries for bnet.  
+ *  wallets to paginate queries for bnet.
  *
  *  An action will be included in the account's bnet if any of the following:
  *     - receiver
  *     - any account named in auth list
  *
- *  A key will be linked to an account if the key is referneced in authorities of updateauth or newaccount 
+ *  A key will be linked to an account if the key is referneced in authorities of updateauth or newaccount
  */
 class bnet_plugin : public plugin<bnet_plugin> {
    public:
@@ -64,6 +64,9 @@ class bnet_plugin : public plugin<bnet_plugin> {
          send(session_id, msg_type, fc::raw::pack(msg));
       }
       void send(uint32_t session_id, uint32_t msg_type, const vector<char>&);
+
+   public:
+      using new_peer = channel_decl<struct new_peer_tag, uint32_t>;
 
    private:
       bnet_ptr my;

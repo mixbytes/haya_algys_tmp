@@ -41,7 +41,11 @@ struct on_irreversible_event {
     block_state_ptr block_ptr;
 };
 
-using grandpa_event_data = static_variant<on_accepted_block_event, on_irreversible_event>;
+struct on_new_peer_event {
+    uint32_t ses_id;
+};
+
+using grandpa_event_data = static_variant<on_accepted_block_event, on_irreversible_event, on_new_peer_event>;
 struct grandpa_event {
     grandpa_event_data data;
 };
@@ -74,6 +78,7 @@ public:
 
     channels::irreversible_block::channel_type::handle _on_irb_handle;
     channels::accepted_block::channel_type::handle _on_accepted_block_handle;
+    bnet_plugin::new_peer::channel_type::handle _on_new_peer_handle;
 
     template <typename T>
     void push_message(const T& msg) {
@@ -244,6 +249,9 @@ public:
             case grandpa_event_data::tag<on_irreversible_event>::value:
                 on(data.get<on_irreversible_event>());
                 break;
+            case grandpa_event_data::tag<on_new_peer_event>::value:
+                on(data.get<on_new_peer_event>());
+                break;
             default:
                 ilog("Grandpa event received, but handler not found, type: ${type}",
                     ("type", data.which())
@@ -300,6 +308,10 @@ public:
     void on(const on_irreversible_event& event) {
         dlog("Grandpa on_irreversible_event event handled, block_id: ${bid}", ("bid", event.block_ptr->id));
     }
+
+    void on(const on_new_peer_event& event) {
+        dlog("Grandpa on_new_peer_event event handled, ses_id: ${ses_id}", ("ses_id", event.ses_id));
+    }
 };
 
 
@@ -348,6 +360,11 @@ void grandpa_plugin::plugin_startup() {
     my->_on_irb_handle = app().get_channel<channels::irreversible_block>()
     .subscribe( [this]( block_state_ptr s ) {
         my->post_event(on_irreversible_event {s});
+    });
+
+    my->_on_new_peer_handle = app().get_channel<bnet_plugin::new_peer>()
+    .subscribe( [this]( uint32_t ses_id ) {
+        my->post_event(on_new_peer_event {ses_id});
     });
 }
 
