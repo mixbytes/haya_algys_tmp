@@ -27,9 +27,14 @@ struct handshake_type {
     block_id_type lib;
 };
 
+struct confirmation_type {
+    block_id_type base_block;
+    vector<block_id_type> blocks;
+};
+
 using handshake_msg = network_msg<handshake_type>;
 using block_get_conf_msg = network_msg<block_get_conf_type>;
-using chain_conf_msg = network_msg<chain_type>;
+using chain_conf_msg = network_msg<confirmation_type>;
 
 
 using chain_conf_msg_ptr = shared_ptr<chain_conf_msg>;
@@ -54,7 +59,7 @@ bool validate_network_msg(const T& msg, const public_key_type& pub_key) {
 
 }
 
-FC_REFLECT(eosio::chain_type, (base_block)(blocks))
+FC_REFLECT(eosio::confirmation_type, (base_block)(blocks))
 FC_REFLECT(eosio::block_get_conf_type, (block_id))
 FC_REFLECT(eosio::handshake_type, (lib))
 FC_REFLECT_TEMPLATE((typename T), eosio::network_msg<T>, (data)(signature))

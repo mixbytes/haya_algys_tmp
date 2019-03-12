@@ -424,6 +424,8 @@ namespace eosio {
 
            do_hello();
            do_read();
+
+           app().get_channel<bnet_plugin::new_peer>().publish(_session_num);
         }
 
         /**
@@ -870,6 +872,8 @@ namespace eosio {
 
            do_hello();
            do_read();
+
+           app().get_channel<bnet_plugin::new_peer>().publish(_session_num);
         }
 
         void do_read() {

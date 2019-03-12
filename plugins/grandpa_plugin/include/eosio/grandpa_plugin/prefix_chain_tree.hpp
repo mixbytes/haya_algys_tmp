@@ -47,6 +47,7 @@ struct node_info {
 struct chain_type {
     block_id_type base_block;
     vector<block_id_type> blocks;
+    signature_type signature;
 };
 
 class NodeNotFoundError : public std::exception {};
