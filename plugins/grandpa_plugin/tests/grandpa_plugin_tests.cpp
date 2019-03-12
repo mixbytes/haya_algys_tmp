@@ -60,7 +60,7 @@ BOOST_AUTO_TEST_CASE(confirmation_) try {
     auto priv_key = private_key::generate();
     auto pub_key = priv_key.get_public_key();
 
-    auto chain = chain_type {
+    auto chain = confirmation_type {
         fc::sha256("a"),
         { fc::sha256("b"), fc::sha256("c"), fc::sha256("d") }
     };
