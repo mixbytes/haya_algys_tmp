@@ -48,7 +48,7 @@ auto get_public_key(const T& msg) {
 template<class T>
 auto make_network_msg(const T& data, const private_key_type& priv_key) {
     auto hash = chain::digest_type::hash(data);
-    return std::make_shared<network_msg<T>>(data, priv_key.sign(hash));
+    return network_msg<T>(data, priv_key.sign(hash));
 }
 
 template<class T>

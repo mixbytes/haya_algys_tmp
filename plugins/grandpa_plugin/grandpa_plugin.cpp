@@ -101,13 +101,12 @@ public:
     void subscribe() {
         app().get_plugin<bnet_plugin>().subscribe<T>(get_net_msg_type<T>(),
         [this](uint32_t ses_id, const T & msg) {
-            push_message(grandpa_net_msg { ses_id, msg });
-
             dlog("Grandpa network message received, ses_id: ${ses_id}, type: ${type}, msg: ${msg}",
                 ("ses_id", ses_id)
                 ("type", get_net_msg_type<T>())
                 ("msg", fc::json::to_string(fc::variant(msg)))
             );
+            push_message(grandpa_net_msg { ses_id, msg });
         });
     }
 
@@ -121,21 +120,20 @@ public:
     template <typename T>
     void post_event(const T& event) {
         auto ev = grandpa_event { event };
-        push_message(ev);
-
         dlog("Grandpa event posted, type: ${type}", ("type", ev.data.which()));
+        push_message(ev);
     }
 
     template <typename T>
     void send(uint32_t ses_id, const T & msg) {
         app().get_plugin<bnet_plugin>()
-            .send(ses_id, get_net_msg_type<T>(), grandpa_message {msg} );
+            .send(ses_id, get_net_msg_type<T>(), msg);
     }
 
     template <typename T>
     void bcast(const T & msg) {
         app().get_plugin<bnet_plugin>()
-            .bcast(get_net_msg_type<T>(), grandpa_message {msg} );
+            .bcast(get_net_msg_type<T>(), msg );
     }
 
     grandpa_message_ptr get_next_msg() {
@@ -183,7 +181,7 @@ public:
                 break;
             }
 
-            dlog("Granpa message processing started, type: ${type}", ("type", msg->which()));
+            dlog("Grandpa message processing started, type: ${type}", ("type", msg->which()));
 
             process_msg(msg);
         }
@@ -204,7 +202,6 @@ public:
     // need handle all messages
     void process_msg(grandpa_message_ptr msg_ptr) {
         auto msg = *msg_ptr;
-
         switch (msg.which()) {
             case grandpa_message::tag<grandpa_net_msg>::value:
                 process_net_msg(msg.get<grandpa_net_msg>());
@@ -292,12 +289,21 @@ public:
         dlog("Grandpa final chain length: ${length}", ("length", final_chain.size()));
     }
 
+    auto get_lib() const {
+        return app().get_plugin<chain_plugin>().chain().last_irreversible_block_id();
+    }
+
     void on(uint32_t ses_id, const block_get_conf_msg& msg) {
         dlog("Grandpa block_get_conf received, msg: ${msg}", ("msg", msg));
     }
 
     void on(uint32_t ses_id, const handshake_msg& msg) {
-        dlog("Grandpa handshake_msg received, msg: ${msg}", ("msg", msg));
+        elog("Grandpa handshake_msg received, msg: ${msg}", ("msg", msg));
+        try {
+            _peers[ses_id] = peer_info{get_public_key(msg), msg.data.lib};
+        } catch (const fc::exception& e) {
+            elog("Grandpa handshake_msg handler error, e: ${e}", ("e", e.what()));
+        }
     }
 
     void on(const on_accepted_block_event& event) {
@@ -309,7 +315,10 @@ public:
     }
 
     void on(const on_new_peer_event& event) {
-        dlog("Grandpa on_new_peer_event event handled, ses_id: ${ses_id}", ("ses_id", event.ses_id));
+        elog("Grandpa on_new_peer_event event handled, ses_id: ${ses_id}", ("ses_id", event.ses_id));
+        auto handshake_msg = make_network_msg(handshake_type{get_lib()}, _private_key);
+        dlog("Sending handshake msg");
+        send(event.ses_id, handshake_msg);
     }
 };
 
@@ -338,7 +347,7 @@ void grandpa_plugin::plugin_initialize(const variables_map& options) {
 void grandpa_plugin::plugin_startup() {
     my->subscribe();
 
-    auto lib_id = app().get_plugin<chain_plugin>().chain().last_irreversible_block_id();
+    auto lib_id = my->get_lib();
 
     my->_prefix_tree_ptr.reset(
         new prefix_chain_tree(std::make_shared<prefix_node>(prefix_node { lib_id }))
