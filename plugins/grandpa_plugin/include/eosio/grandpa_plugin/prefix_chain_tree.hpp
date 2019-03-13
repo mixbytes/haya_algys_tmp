@@ -70,9 +70,9 @@ public:
         insert_blocks(node, chain, pub_key);
     }
 
-    auto get_final(size_t confirmation_number) const {
-        const auto result = get_chain_head(root, confirmation_number, 0);
-        return construct_chain(result.node);
+    auto get_final_chain_head(size_t confirmation_number) const {
+        auto head = get_chain_head(root, confirmation_number, 0).node;
+        return head != root ? head : nullptr;
     }
 
     auto get_root() const {
