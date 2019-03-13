@@ -285,8 +285,10 @@ public:
             return;
         }
 
-        auto final_chain = _prefix_tree_ptr->get_final(2);
-        dlog("Grandpa final chain length: ${length}", ("length", final_chain.size()));
+        auto final_chain_head = _prefix_tree_ptr->get_final_chain_head(2);
+        if (final_chain_head) {
+            dlog("Grandpa final chain head found: ${bid}", ("bid", final_chain_head->block_id));
+        }
     }
 
     auto get_lib() const {
