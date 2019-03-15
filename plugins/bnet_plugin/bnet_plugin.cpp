@@ -62,6 +62,7 @@
 #include <boost/algorithm/string/classification.hpp>
 
 #include <eosio/chain/plugin_interface.hpp>
+#include <queue>
 
 using tcp = boost::asio::ip::tcp;
 namespace ws  = boost::beast::websocket;
@@ -175,6 +176,8 @@ struct custom_message {
    vector<char> data;
 };
 FC_REFLECT( custom_message, (type)(data) )
+
+using custom_message_ptr = std::shared_ptr<custom_message>;
 
 using bnet_message = fc::static_variant<hello,
                                         trx_notice,
@@ -310,7 +313,7 @@ namespace eosio {
         boost::beast::flat_buffer                                     _in_buffer;
         flat_set<block_id_type>                                       _block_header_notices;
         fc::optional<fc::variant_object>                              _logger_variant;
-
+        std::queue<custom_message_ptr>                                _custom_messages;
 
         int next_session_id()const {
            static std::atomic<int> session_count(0);
@@ -690,11 +693,22 @@ namespace eosio {
            if( send_block_notice() ) return;
            if( send_pong() ) return;
            if( send_ping() ) return;
+           if( send_custom_messages() ) return;
 
            /// we don't know where we are (waiting on accept block localhost)
            if( _local_head_block_id == block_id_type() ) return ;
            if( send_next_block() ) return;
            if( send_next_trx() ) return;
+        }
+
+        bool send_custom_messages() {
+            if (!_custom_messages.size())
+               return false;
+
+            auto msg = _custom_messages.front();
+            _custom_messages.pop();
+            send(*msg);
+            return true;
         }
 
         bool send_block_notice() {
@@ -1182,24 +1196,28 @@ namespace eosio {
          }
 
          void bcast(uint32_t msg_type, const vector<char>& msg) {
-            custom_message mess {msg_type, msg};
+            auto mess = std::make_shared<custom_message>(custom_message {msg_type, msg});
 
-            for_each_session([mess = std::move(mess), msg_type]( auto ses ) {
-               ses->send(mess);
+            for_each_session([mess]( auto ses ) {
+               ses->_custom_messages.push(mess);
+               ses->maybe_send_next_message();
             });
          }
 
          void send(uint32_t session_id, uint32_t msg_type, const vector<char> & msg) {
-            custom_message mess{msg_type, msg};
+            auto mess = std::make_shared<custom_message>(custom_message {msg_type, msg});
 
-            app().get_io_service().post([this, session_id, mess=std::move(mess)] {
+            app().get_io_service().post([this, session_id, mess] {
                dlog("ses by num, num: ${num}, size: ${size}", ("num", session_id)("size", _sessions_by_num.size()));
                if (_sessions_by_num.find(session_id) != _sessions_by_num.end()) {
                   auto ses_wptr = _sessions[_sessions_by_num[session_id]];
                   if (auto ses = ses_wptr.lock()) {
                      ses->_ios.post(boost::asio::bind_executor(
                            ses->_strand,
-                           [ses, mess=std::move(mess)]() { ses->send(mess); }
+                           [ses, mess]() {
+                              ses->_custom_messages.push(mess);
+                              ses->maybe_send_next_message();
+                           }
                      ));
                   }
                }
