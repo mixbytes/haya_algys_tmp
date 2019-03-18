@@ -1,11 +1,9 @@
 #pragma once
 
-#include <eosio/chain/types.hpp>
+#include <eosio/grandpa_plugin/types.hpp>
 #include <memory>
 #include <vector>
 #include <map>
-
-namespace eosio {
 
 struct prefix_node;
 struct chain_type;
@@ -14,7 +12,6 @@ using std::vector;
 using std::shared_ptr;
 using std::pair;
 using std::make_pair;
-using namespace chain;
 
 using prefix_node_ptr = shared_ptr<prefix_node>;
 using chain_type_ptr = shared_ptr<chain_type>;
@@ -36,6 +33,10 @@ struct prefix_node {
             }
         }
         return nullptr;
+    }
+
+    bool has_confirmation(const public_key_type& pub_key ) {
+        return confirmation_data.find(pub_key) != confirmation_data.end();
     }
 };
 
@@ -62,12 +63,30 @@ public:
         return find_node(block_id, root);
     }
 
-    void insert(const chain_type_ptr& chain, const public_key_type& pub_key) {
+    prefix_node_ptr insert(const chain_type_ptr& chain, const public_key_type& pub_key) {
         auto node = find(chain->base_block);
+        vector<block_id_type> blocks;
+
+        if (!node) {
+            auto block_itr = std::find_if(chain->blocks.begin(), chain->blocks.end(), [&](const auto& block) {
+                return (bool) find(block);
+            });
+
+            if (block_itr != chain->blocks.end()) {
+                dlog("Found node: ${id}", ("id", *block_itr));
+                blocks.insert(blocks.end(), block_itr + 1, chain->blocks.end());
+                node = find(*block_itr);
+            }
+        }
+        else {
+            blocks = chain->blocks;
+        }
+
         if (!node) {
             throw NodeNotFoundError();
         }
-        insert_blocks(node, chain, pub_key);
+
+        return insert_blocks(node, chain, blocks, pub_key);
     }
 
     auto get_final_chain_head(size_t confirmation_number) const {
@@ -81,6 +100,9 @@ public:
 
     auto set_root(const prefix_node_ptr& new_root) {
         root = new_root;
+        if (new_root->parent) {
+            new_root->parent.reset();
+        }
     }
 
 private:
@@ -123,13 +145,19 @@ private:
         return nullptr;
     }
 
-    void insert_blocks(prefix_node_ptr node, const chain_type_ptr& chain, const public_key_type& pub_key) {
+    prefix_node_ptr insert_blocks(prefix_node_ptr node, const chain_type_ptr& chain, const vector<block_id_type>& blocks, const public_key_type& pub_key) {
+        auto max_conf_node = node;
         node->confirmation_data[pub_key] = chain;
+        dlog("Confirmations, id: ${id}, count: ${count}", ("id", node->block_id)("count", node->confirmation_data.size()));
 
-        for (const auto& block_id : chain->blocks) {
+        for (const auto& block_id : blocks) {
             auto next_node = node->get_matching_node(block_id);
             if (next_node) {
+                dlog("Confirmations, id: ${id}, count: ${count}", ("id", next_node->block_id)("count", next_node->confirmation_data.size()));
                 next_node->confirmation_data[pub_key] = chain;
+                if (max_conf_node->confirmation_data.size() <= next_node->confirmation_data.size()) {
+                    max_conf_node = next_node;
+                }
             } else {
                 next_node = std::make_shared<prefix_node>(prefix_node{block_id,
                                                                       {{pub_key, chain}},
@@ -139,7 +167,7 @@ private:
             }
             node = next_node;
         }
-    }
-};
 
+        return max_conf_node;
+    }
 };
