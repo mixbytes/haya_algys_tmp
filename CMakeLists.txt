@@ -236,6 +236,7 @@ add_subdirectory( unittests )
 add_subdirectory( tests )
 add_subdirectory( tools )
 add_subdirectory( debian )
+add_subdirectory( simulator )
 
 install_directory_permissions(DIRECTORY ${CMAKE_INSTALL_FULL_SYSCONFDIR}/eosio)
 
