@@ -17,8 +17,7 @@ ExternalProject_Get_Property(gtest source_dir binary_dir)
 add_dependencies(simulator gtest)
 include_directories(${source_dir}/googletest/include)
 
-target_link_libraries(simulator ${binary_dir}/googlemock/gtest/libgtest.a)
-#target_link_libraries(simulator ${binary_dir}/googlemock/gtest/libgtest_main.a)
+target_link_libraries(simulator ${binary_dir}/googlemock/gtest/libgtest.a pthread fc)
 
 ##################################
 # Just make the test runnable with
