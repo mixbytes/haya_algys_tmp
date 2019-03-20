@@ -120,11 +120,11 @@ BOOST_AUTO_TEST_CASE(confirmation_) try {
         { fc::sha256("b"), fc::sha256("c"), fc::sha256("d") }
     };
 
-    auto conf_msg = make_network_msg(chain, priv_key);
+    auto conf_msg = chain_conf_msg(chain, priv_key);
 
     BOOST_TEST(chain.base_block == conf_msg.data.base_block);
     BOOST_TEST(chain.blocks == conf_msg.data.blocks);
-    BOOST_TEST(true == validate_network_msg(conf_msg, pub_key));
+    BOOST_TEST(true == conf_msg.validate(pub_key));
 
 } FC_LOG_AND_RETHROW()
 

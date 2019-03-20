@@ -393,7 +393,7 @@ private:
             return;
         }
 
-        if (!validate_network_msg(msg, peer_itr->second.public_key)) {
+        if (!msg.validate(peer_itr->second.public_key)) {
             elog("Grandpa confirmation validation fail, ses_id: ${ses_id}",
                 ("ses_id", ses_id)
             );
@@ -440,9 +440,9 @@ private:
     void on(uint32_t ses_id, const handshake_msg& msg) {
         wlog("Grandpa handshake_msg received, msg: ${msg}", ("msg", msg));
         try {
-            _peers[ses_id] = peer_info {get_public_key(msg), msg.data.lib, msg.data.lib};
+            _peers[ses_id] = peer_info {msg.public_key(), msg.data.lib, msg.data.lib};
 
-            send(ses_id, make_network_msg(handshake_ans_type { get_lib() }, _private_key));
+            send(ses_id, handshake_ans_msg(handshake_ans_type { get_lib() }, _private_key));
         } catch (const fc::exception& e) {
             elog("Grandpa handshake_msg handler error, e: ${e}", ("e", e.what()));
         }
@@ -451,7 +451,7 @@ private:
     void on(uint32_t ses_id, const handshake_ans_msg& msg) {
         wlog("Grandpa handshake_ans_msg received, msg: ${msg}", ("msg", msg));
         try {
-            _peers[ses_id] = peer_info {get_public_key(msg), msg.data.lib, msg.data.lib};
+            _peers[ses_id] = peer_info {msg.public_key(), msg.data.lib, msg.data.lib};
         } catch (const fc::exception& e) {
             elog("Grandpa handshake_ans_msg handler error, e: ${e}", ("e", e.what()));
         }
@@ -476,7 +476,7 @@ private:
             );
         }
 
-        auto conf_msg = make_network_msg(make_confirmation(*chain_ptr), _private_key);
+        auto conf_msg = chain_conf_msg(make_confirmation(*chain_ptr), _private_key);
         chain_ptr->signature = conf_msg.signature;
 
         auto max_conf_node = _prefix_tree_ptr->insert(chain_ptr, _private_key.get_public_key());
@@ -496,9 +496,9 @@ private:
 
     void on(const on_new_peer_event& event) {
         elog("Grandpa on_new_peer_event event handled, ses_id: ${ses_id}", ("ses_id", event.ses_id));
-        auto handshake_msg = make_network_msg(handshake_type{get_lib()}, _private_key);
+        auto msg = handshake_msg(handshake_type{get_lib()}, _private_key);
         dlog("Sending handshake msg");
-        send(event.ses_id, handshake_msg);
+        send(event.ses_id, msg);
     }
 
     void update_lib(const block_id_type& lib_id) {
@@ -516,7 +516,7 @@ private:
         if (!_prefix_tree_ptr->get_root()->has_confirmation(pub_key)) {
             auto chain = std::make_shared<chain_type>(chain_type{ lib_id });
 
-            auto conf_msg = make_network_msg(make_confirmation(*chain), _private_key);
+            auto conf_msg = chain_conf_msg(make_confirmation(*chain), _private_key);
             chain->signature = conf_msg.signature;
 
             _prefix_tree_ptr->get_root()->confirmation_data[pub_key] = chain;
@@ -530,7 +530,7 @@ private:
             auto ext_chain = extend_chain(chain, peer.second.last_known_block_id);
 
             if (ext_chain) {
-                auto conf = make_network_msg(make_confirmation(*ext_chain), _private_key);
+                auto conf = chain_conf_msg(make_confirmation(*ext_chain), _private_key);
                 send(peer.first, conf);
                 peer.second.last_known_block_id = get_last_block_id(*ext_chain);
             }
