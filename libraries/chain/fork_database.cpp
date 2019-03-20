@@ -311,9 +311,7 @@ namespace eosio { namespace chain {
    // need to check confirmations before call this method
    void fork_database::bft_finalize( const block_id_type& block_id ) {
       auto b = get_block( block_id );
-      if (!b) {
-         return;
-      }
+      EOS_ASSERT( b, fork_db_block_not_found, "unable to find block id ${id}", ("id",block_id));
 
       set_bft_irreversible( block_id );
 
