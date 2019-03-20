@@ -16,6 +16,22 @@ public:
     network_msg() = default;
     network_msg(const T& data_, const signature_type& signature_): data(data_), signature(signature_) {}
     network_msg(const T& data_, signature_type&& signature_): data(data_), signature(signature_) {}
+    network_msg(const T& data_, const private_key_type& priv_key) {
+        data = data_;
+        signature = priv_key.sign(hash());
+    }
+
+    digest_type hash() const {
+        return digest_type::hash(data);
+    }
+
+    public_key_type public_key() const {
+        return public_key_type(signature, hash());
+    }
+
+    bool validate(const public_key_type& pub_key) const {
+        return public_key() == pub_key;
+    }
 };
 
 
@@ -43,24 +59,6 @@ using chain_conf_msg = network_msg<confirmation_type>;
 
 
 using chain_conf_msg_ptr = shared_ptr<chain_conf_msg>;
-
-template<class T>
-auto get_public_key(const T& msg) {
-    auto hash = digest_type::hash(msg.data);
-    return public_key_type(msg.signature, hash);
-}
-
-template<class T>
-auto make_network_msg(const T& data, const private_key_type& priv_key) {
-    auto hash = digest_type::hash(data);
-    return network_msg<T>(data, priv_key.sign(hash));
-}
-
-template<class T>
-bool validate_network_msg(const T& msg, const public_key_type& pub_key) {
-    auto hash = digest_type::hash(msg.data);
-    return public_key_type(msg.signature, hash) == pub_key;
-}
 
 
 FC_REFLECT(confirmation_type, (base_block)(blocks))
