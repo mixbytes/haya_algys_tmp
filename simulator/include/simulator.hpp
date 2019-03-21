@@ -91,6 +91,8 @@ public:
         std::cout << "On new peer event handled by " << id << " at " << tester_clock.now() << endl;
     }
 
+    virtual ~Node() = default;
+
     uint32_t id;
     bool is_producer = true;
     Network net;
@@ -187,6 +189,7 @@ private:
         for (auto i = 0; i < count; ++i) {
             auto node = std::make_shared<TNode>(i, Network(i, this));
             nodes.push_back(std::static_pointer_cast<Node>(node));
+
         }
     }
 
