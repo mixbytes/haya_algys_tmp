@@ -1,6 +1,6 @@
 #pragma once
 
-#include <eosio/grandpa_plugin/types.hpp>
+#include "types.hpp"
 #include <memory>
 #include <vector>
 #include <map>
