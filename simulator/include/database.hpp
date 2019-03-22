@@ -62,9 +62,13 @@ public:
     }
 
     void insert(const fork_db_chain_type_ptr& chain) {
-        auto node = find(chain->base_block);
+        insert(*chain);
+    }
+
+    void insert(const fork_db_chain_type& chain) {
+        auto node = find(chain.base_block);
         assert(node);
-        insert(node, chain->blocks);
+        insert(node, chain.blocks);
     }
 
     void insert(fork_db_node_ptr node, const vector<block_id_type>& blocks) {
@@ -93,6 +97,10 @@ public:
         auto node = find(block_id);
         assert(node);
         set_new_lib(node);
+    }
+
+    fork_db_node_ptr get_root() const {
+        return root;
     }
 
 private:
