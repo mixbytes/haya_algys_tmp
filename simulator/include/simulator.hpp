@@ -103,14 +103,21 @@ public:
         }
         cout << "]" << endl;
         db.insert(chain);
+        for (auto& block_id : chain.blocks) {
+            on_accepted_block_event(block_id);
+        }
     }
 
     virtual void on_receive(uint32_t from, void *) {
         std::cout << "Received from " << from << std::endl;
     }
 
-    virtual void on_new_peer_event(uint32_t from)  {
+    virtual void on_new_peer_event(uint32_t from) {
         std::cout << "On new peer event handled by " << id << " at " << tester_clock.now() << endl;
+    }
+
+    virtual void on_accepted_block_event(block_id_type id) {
+        std::cout << "On accepted block event handled by " << id << " at " << tester_clock.now() << endl;
     }
 
     uint32_t id;
@@ -277,7 +284,7 @@ public:
                 task.cb(nodes[task.to]);
             }
 
-            this_thread::sleep_for(chrono::milliseconds(3000));
+            this_thread::sleep_for(chrono::milliseconds(1000));
         }
     }
 

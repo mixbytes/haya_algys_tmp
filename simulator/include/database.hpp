@@ -27,7 +27,7 @@ struct fork_db_node {
     }
 };
 
-struct node_info {
+struct block_info {
     fork_db_node_ptr node;
     size_t height;
 };
@@ -131,8 +131,8 @@ private:
         return result;
     }
 
-    node_info find_master_head(const fork_db_node_ptr& node, size_t depth) const {
-        auto result = node_info{node, depth};
+    block_info find_master_head(const fork_db_node_ptr& node, size_t depth) const {
+        auto result = block_info{node, depth};
         for (const auto& adjacent_node : node->adjacent_nodes) {
             const auto head_node = find_master_head(adjacent_node, depth + 1);
             if (head_node.height > result.height) {

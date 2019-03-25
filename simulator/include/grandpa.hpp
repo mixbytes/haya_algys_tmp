@@ -1,14 +1,17 @@
 #pragma once
 #include "simulator.hpp"
+#include "database.hpp"
 #define SYNC_GRANDPA //SYNC mode
-#include "../../plugins/grandpa_plugin/include/eosio/grandpa_plugin/grandpa.hpp"
+#include <eosio/grandpa_plugin/grandpa.hpp>
 #include <mutex>
 
 
 
 class GrandpaNode: public Node {
 public:
-    explicit GrandpaNode(int id, Network && net): Node(id, std::move(net)) {
+    explicit GrandpaNode(int id, Network && net, fork_db && db):
+        Node(id, std::move(net), std::move(db))
+    {
         init_channels();
         init_providers();
         init_grandpa();
@@ -22,11 +25,16 @@ public:
 
     void on_receive(uint32_t from, void* msg) override {
         auto data = *static_cast<grandpa_net_msg*>(msg);
+        data.ses_id = from;
         in_net_ch->send(data);
     }
 
     void on_new_peer_event(uint32_t id) override {
         ev_ch->send(grandpa_event { ::on_new_peer_event { id } });
+    }
+
+    void on_accepted_block_event(block_id_type id) override {
+        ev_ch->send(grandpa_event { ::on_accepted_block_event { id } });
     }
 
 private:
@@ -41,12 +49,16 @@ private:
     }
 
     void init_providers() {
-        prev_block_prov = std::make_shared<prev_block_prodiver>([](const block_id_type& id) -> fc::optional<block_id_type> {
-            return {};
+        prev_block_prov = std::make_shared<prev_block_prodiver>([this](const block_id_type& id) -> fc::optional<block_id_type> {
+            auto block = db.find(id);
+            if (!block || !block->parent)
+                return {};
+            else
+                return block->parent->block_id;
         });
 
-        lib_prov = std::make_shared<lib_prodiver>([]() -> block_id_type {
-            return block_id_type();
+        lib_prov = std::make_shared<lib_prodiver>([this]() -> block_id_type {
+            return db.last_irreversible_block_id();
         });
 
         prods_prov = std::make_shared<prods_provider>([]() -> vector<public_key_type> {

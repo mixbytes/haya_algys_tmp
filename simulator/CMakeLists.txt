@@ -16,6 +16,7 @@ ExternalProject_Get_Property(gtest source_dir binary_dir)
 
 add_dependencies(simulator gtest)
 include_directories(${source_dir}/googletest/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../plugins/grandpa_plugin/include)
 
 target_link_libraries(simulator ${binary_dir}/googlemock/gtest/libgtest.a pthread fc)
 
