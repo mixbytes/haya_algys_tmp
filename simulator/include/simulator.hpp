@@ -11,6 +11,7 @@
 #include <numeric>
 #include <chrono>
 #include <fc/bitutil.hpp>
+#include <boost/optional.hpp>
 
 #include <database.hpp>
 
@@ -19,6 +20,10 @@ using namespace std;
 ostream& operator<<(ostream& os, const block_id_type& block) {
     os << block.str().substr(16, 4);
     return os;
+}
+
+uint32_t get_block_height(const block_id_type& id) {
+    return fc::endian_reverse_u32(id._hash[0]);
 }
 
 class Clock {
@@ -126,7 +131,6 @@ public:
     fork_db db;
 };
 
-
 class TestRunner {
 public:
     TestRunner() = default;
@@ -230,6 +234,20 @@ public:
         add_task(std::move(task));
     }
 
+    void add_stop_task(uint32_t at) {
+        Task task{RUNNER_ID, RUNNER_ID, at,
+                  [&](NodePtr n) { should_stop = true; }
+                 };
+        add_task(std::move(task));
+    }
+
+//    void add_update_delay_task(uint32_t at, size_t row, size_t col, int delay) {
+//        Task task{RUNNER_ID, RUNNER_ID, at,
+//                  [&](NodePtr n) { delay_matrix[row][col] = delay; }
+//        };
+//        add_task(std::move(task));
+//    }
+
     void schedule_producers() {
         cout << "[TaskRunner] Scheduling PRODUCERS " << endl;
         auto ordering = get_ordering();
@@ -271,7 +289,7 @@ public:
         init_connections();
 
         schedule_producers();
-        while (!timeline.empty()) {
+        while (!should_stop) {
             auto task = timeline.top();
             cout << "[TaskRunner] " << "current_time=" << task.at << " schedule_time=" << schedule_time << endl;
             timeline.pop();
@@ -284,7 +302,7 @@ public:
                 task.cb(nodes[task.to]);
             }
 
-            this_thread::sleep_for(chrono::milliseconds(1000));
+            this_thread::sleep_for(chrono::milliseconds(0));
         }
     }
 
@@ -300,8 +318,24 @@ public:
         return dist_matrix;
     }
 
+    const vector<NodePtr> get_nodes() const {
+        return nodes;
+    }
+
+    NodePtr get_node(size_t index) {
+        return nodes[index];
+    }
+
+    const fork_db& get_db(size_t index) {
+        return nodes[index]->db;
+    }
+
     void add_task(Task && task) {
         timeline.push(task);
+    }
+
+    size_t bft_threshold() {
+        return 2 * get_instances() / 3 + 1;
     }
 
     const block_id_type genesys_block;
@@ -310,6 +344,8 @@ public:
 
     size_t slot_ms;
     size_t blocks_per_slot;
+    bool should_stop = false;
+
 
 private:
     block_id_type generate_block(uint32_t block_height) {
@@ -322,7 +358,7 @@ private:
     void init_nodes(uint32_t count) {
         nodes.clear();
         for (auto i = 0; i < count; ++i) {
-            auto conf_number = blocks_per_slot * get_instances();
+            auto conf_number = blocks_per_slot * bft_threshold();
             auto node = std::make_shared<TNode>(i, Network(i, this), fork_db(genesys_block, conf_number));
             nodes.push_back(std::static_pointer_cast<Node>(node));
         }
