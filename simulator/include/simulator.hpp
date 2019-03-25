@@ -126,8 +126,9 @@ public:
 class TestRunner {
 public:
     TestRunner() = default;
-    explicit TestRunner(int instances) {
-        init_runner_data(instances);
+    explicit TestRunner(int instances, size_t slot_ms_ = 500, size_t blocks_per_slot_ = 1) :
+        slot_ms(slot_ms_), blocks_per_slot(blocks_per_slot_) {
+            init_runner_data(instances);
     }
 
     explicit TestRunner(const matrix_type& matrix) {
@@ -214,7 +215,7 @@ public:
     vector<int> get_ordering() {
         vector<int> permutation(get_instances());
         iota(permutation.begin(), permutation.end(), 0);
-        random_shuffle(permutation.begin(), permutation.end());
+        random_shuffle(permutation.begin(), permutation.end(), [](size_t n) { return rand() % n; });
         return permutation;
     }
 
@@ -226,17 +227,17 @@ public:
         for (int i = 0; i < instances; i++) {
             int producer_id = ordering[i];
             Task task;
-            task.at = now + i * SLOT_MS;
+            task.at = now + i * slot_ms;
             task.to = producer_id;
             task.cb = [&](NodePtr node) {
                 auto chain = create_blocks(node);
                 relay_blocks(node, chain);
-                tester_clock.update(SLOT_MS);
+                tester_clock.update(slot_ms);
             };
             add_task(std::move(task));
         }
 
-        schedule_time = now + instances * SLOT_MS;
+        schedule_time = now + instances * slot_ms;
     }
 
     void relay_blocks(NodePtr node, const fork_db_chain_type& chain) {
@@ -260,8 +261,7 @@ public:
         schedule_producers();
         while (!timeline.empty()) {
             auto task = timeline.top();
-            cout << "[TaskRunner] " << task.at << " " << schedule_time << endl;
-
+            cout << "[TaskRunner] " << "current_time=" << task.at << " schedule_time=" << schedule_time << endl;
             cout << "[TaskRunner] Executing task for " << task.to << endl;
             timeline.pop();
             tester_clock.set(task.at);
@@ -274,13 +274,6 @@ public:
 
             this_thread::sleep_for(chrono::milliseconds(3000));
         }
-
-//        while (!timeline.empty()) {
-//            auto task = timeline.top();
-//            timeline.pop();
-//            tester_clock.set(task.at);
-//            task.cb(nodes[task.to]);
-//        }
     }
 
     uint32_t get_instances() {
@@ -300,10 +293,9 @@ public:
     }
 
     const block_id_type genesys_block;
-    const int blocks_per_slot = 1;
-    const int SLOT_MS = 500;
     const int DELAY_MS = 10;
-
+    size_t slot_ms;
+    size_t blocks_per_slot;
 private:
     block_id_type generate_block(uint32_t block_height) {
         auto block_id = digest_type::hash(fc::crypto::private_key::generate());
