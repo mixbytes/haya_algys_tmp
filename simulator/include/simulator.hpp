@@ -219,7 +219,15 @@ public:
         return permutation;
     }
 
+    void add_schedule_task(uint32_t at) {
+        Task task{RUNNER_ID, RUNNER_ID, at,
+                  [&](NodePtr n) { schedule_producers(); }
+                  };
+        add_task(std::move(task));
+    }
+
     void schedule_producers() {
+        cout << "[TaskRunner] Scheduling PRODUCERS " << endl;
         auto ordering = get_ordering();
         auto now = tester_clock.now();
         auto instances = get_instances();
@@ -232,12 +240,12 @@ public:
             task.cb = [&](NodePtr node) {
                 auto chain = create_blocks(node);
                 relay_blocks(node, chain);
-                tester_clock.update(slot_ms);
             };
             add_task(std::move(task));
         }
 
         schedule_time = now + instances * slot_ms;
+        add_schedule_task(schedule_time);
     }
 
     void relay_blocks(NodePtr node, const fork_db_chain_type& chain) {
@@ -262,14 +270,14 @@ public:
         while (!timeline.empty()) {
             auto task = timeline.top();
             cout << "[TaskRunner] " << "current_time=" << task.at << " schedule_time=" << schedule_time << endl;
-            cout << "[TaskRunner] Executing task for " << task.to << endl;
             timeline.pop();
             tester_clock.set(task.at);
-            task.cb(nodes[task.to]);
-
-            if (tester_clock.now() == schedule_time) {
-                cout << "[TaskRunner] Scheduling PRODUCERS " << endl;
-                schedule_producers();
+            if (task.to == RUNNER_ID) {
+                cout << "[TaskRunner] Executing task for " << "TaskRunner" << endl;
+                task.cb(nullptr);
+            } else {
+                cout << "[TaskRunner] Executing task for " << task.to << endl;
+                task.cb(nodes[task.to]);
             }
 
             this_thread::sleep_for(chrono::milliseconds(3000));
@@ -294,8 +302,11 @@ public:
 
     const block_id_type genesys_block;
     const int DELAY_MS = 10;
+    const uint32_t RUNNER_ID = 10000000;
+
     size_t slot_ms;
     size_t blocks_per_slot;
+
 private:
     block_id_type generate_block(uint32_t block_height) {
         auto block_id = digest_type::hash(fc::crypto::private_key::generate());
