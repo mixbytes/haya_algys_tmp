@@ -1,5 +1,6 @@
-#include <eosio/grandpa_plugin/network_messages.hpp>
-#include <eosio/grandpa_plugin/prefix_chain_tree.hpp>
+#pragma once
+#include "network_messages.hpp"
+#include "prefix_chain_tree.hpp"
 #include <fc/exception/exception.hpp>
 #include <fc/io/json.hpp>
 #include <fc/bitutil.hpp>
@@ -8,6 +9,7 @@
 #include <atomic>
 #include <mutex>
 #include <thread>
+#include <condition_variable>
 
 
 using ::fc::static_variant;
@@ -228,19 +230,23 @@ public:
         );
         update_lib(lib_id);
 
+#ifndef SYNC_GRANDPA
         _thread_ptr.reset(new std::thread([this]() {
             wlog("Grandpa thread started");
             loop();
             wlog("Grandpa thread terminated");
         }));
+#endif
 
         subscribe();
     }
 
     void stop() {
+#ifndef SYNC_GRANDPA
         _done = true;
         _message_queue.terminate();
         _thread_ptr->join();
+#endif
     }
 
 private:
@@ -250,7 +256,10 @@ private:
     prefix_chain_tree_ptr _prefix_tree_ptr;
     std::map<uint32_t, peer_info> _peers;
 
+#ifndef SYNC_GRANDPA
     message_queue<grandpa_message> _message_queue;
+#endif
+
     net_channel_ptr _in_net_channel;
     net_channel_ptr _out_net_channel;
     event_channel_ptr _in_event_channel;
@@ -261,12 +270,20 @@ private:
     void subscribe() {
         _in_net_channel->subscribe([&](const grandpa_net_msg& msg) {
             dlog("Grandpa received net message, type: ${type}", ("type", msg.data.which()));
+#ifdef SYNC_GRANDPA
+            process_msg(std::make_shared<grandpa_message>(msg));
+#else
             _message_queue.push_message(msg);
+#endif
         });
 
         _in_event_channel->subscribe([&](const grandpa_event& event) {
             dlog("Grandpa received event, type: ${type}", ("type", event.data.which()));
+#ifdef SYNC_GRANDPA
+            process_msg(std::make_shared<grandpa_message>(event));
+#else
             _message_queue.push_message(event);
+#endif
         });
     }
 
@@ -288,6 +305,7 @@ private:
         }
     }
 
+#ifndef SYNC_GRANDPA
     void loop() {
         while (true) {
             auto msg = _message_queue.get_next_msg_wait();
@@ -301,6 +319,7 @@ private:
             process_msg(msg);
         }
     }
+#endif
 
     // void do_bft_finalize(const block_id_type& block_id) {
     //     app().get_io_service().post([this, bid = block_id]() {
