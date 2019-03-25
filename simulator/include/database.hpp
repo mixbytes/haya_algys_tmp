@@ -75,21 +75,21 @@ public:
         try_update_lib(insert_blocks(node, blocks));
     }
 
-    fork_db_node_ptr find(const block_id_type& block_id) {
+    fork_db_node_ptr find(const block_id_type& block_id) const {
         return find_node(block_id, root);
     }
 
-    block_id_type fetch_prev_block_id(const block_id_type& block_id) {
+    block_id_type fetch_prev_block_id(const block_id_type& block_id) const {
         auto node = find(block_id);
         assert(node && node->parent);
         return node->parent->block_id;
     }
 
-    block_id_type last_irreversible_block_id() {
+    block_id_type last_irreversible_block_id() const {
         return root->block_id;
     }
 
-    fork_db_node_ptr get_master_head() {
+    fork_db_node_ptr get_master_head() const {
         return find_master_head(root, 0).node;
     }
 
