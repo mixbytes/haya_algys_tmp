@@ -39,11 +39,13 @@ public:
         auto in_net_ch = std::make_shared<net_channel>();
         auto out_net_ch = std::make_shared<net_channel>();
         auto ev_ch = std::make_shared<event_channel>();
+        auto finality_ch = std::make_shared<finality_channel>();
 
         _grandpa
             .set_in_net_channel(in_net_ch)
             .set_out_net_channel(out_net_ch)
-            .set_event_channel(ev_ch);
+            .set_event_channel(ev_ch)
+            .set_finality_channel(finality_ch);
 
         subscribe<handshake_msg>(in_net_ch);
         subscribe<handshake_ans_msg>(in_net_ch);
@@ -86,6 +88,10 @@ public:
                     );
                 break;
             }
+        });
+
+        finality_ch->subscribe([this](const block_id_type& msg) {
+            //TODO finalization
         });
 
         auto prev_block_pr = std::make_shared<prev_block_prodiver>([](const block_id_type& id) -> optional<block_id_type> {
