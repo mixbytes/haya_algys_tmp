@@ -42,9 +42,7 @@ private:
 
 class TestRunner;
 class Node;
-
 using NodePtr = std::shared_ptr<Node>;
-
 
 struct Task {
     uint32_t from;
@@ -87,6 +85,7 @@ class Node {
 public:
     Node() = default;
     explicit Node(int id, Network && net, fork_db&& db): id(id), net(std::move(net)), db(std::move(db)) {}
+    virtual ~Node() = default;
 
     template <typename T>
     void send(uint32_t to, const T& msg) {
@@ -104,17 +103,22 @@ public:
         }
         cout << "]" << endl;
         db.insert(chain);
+        for (auto& block_id : chain.blocks) {
+            on_accepted_block_event(block_id);
+        }
     }
 
-    virtual void on_receive(void *) {
-        std::cout << "Received by " << id << std::endl;
+    virtual void on_receive(uint32_t from, void *) {
+        std::cout << "Received from " << from << std::endl;
     }
 
-    virtual void on_new_peer_event(uint32_t from)  {
+    virtual void on_new_peer_event(uint32_t from) {
         std::cout << "On new peer event handled by " << id << " at " << tester_clock.now() << endl;
     }
 
-    virtual ~Node() = default;
+    virtual void on_accepted_block_event(block_id_type id) {
+        std::cout << "On accepted block event handled by " << id << " at " << tester_clock.now() << endl;
+    }
 
     uint32_t id;
     bool is_producer = true;
@@ -280,7 +284,7 @@ public:
                 task.cb(nodes[task.to]);
             }
 
-            this_thread::sleep_for(chrono::milliseconds(3000));
+            this_thread::sleep_for(chrono::milliseconds(1000));
         }
     }
 
@@ -385,8 +389,8 @@ void Network::send(uint32_t to, const T& msg) {
         node_id,
         to,
         tester_clock.now() + matrix[node_id][to],
-        [msg](NodePtr n) {
-            n->on_receive(msg);
+        [node_id = node_id, msg = msg](NodePtr n) {
+            n->on_receive(node_id, (void*)&msg);
         }
     });
 }

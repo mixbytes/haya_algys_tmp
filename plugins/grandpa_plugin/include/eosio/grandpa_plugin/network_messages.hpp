@@ -1,8 +1,7 @@
 #pragma once
 
-#include <eosio/grandpa_plugin/types.hpp>
-#include <eosio/grandpa_plugin/prefix_chain_tree.hpp>
-#include <eosio/chain/types.hpp>
+#include "types.hpp"
+#include "prefix_chain_tree.hpp"
 #include <fc/reflect/reflect.hpp>
 
 using std::vector;
