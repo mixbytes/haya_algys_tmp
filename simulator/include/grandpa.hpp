@@ -42,9 +42,14 @@ private:
         in_net_ch = std::make_shared<net_channel>();
         out_net_ch = std::make_shared<net_channel>();
         ev_ch = std::make_shared<event_channel>();
+        finality_ch = std::make_shared<finality_channel>();
 
         out_net_ch->subscribe([this](const grandpa_net_msg& msg) {
             send<grandpa_net_msg>(msg.ses_id, msg);
+        });
+
+        finality_ch->subscribe([this](const block_id_type& id) {
+            db.bft_finalize(id);
         });
     }
 
@@ -71,6 +76,7 @@ private:
             .set_event_channel(ev_ch)
             .set_in_net_channel(in_net_ch)
             .set_out_net_channel(out_net_ch)
+            .set_finality_channel(finality_ch)
             .set_prev_block_provider(prev_block_prov)
             .set_lib_provider(lib_prov)
             .set_prods_provider(prods_prov)
@@ -80,6 +86,7 @@ private:
     net_channel_ptr in_net_ch;
     net_channel_ptr out_net_ch;
     event_channel_ptr ev_ch;
+    finality_channel_ptr finality_ch;
 
     prev_block_prodiver_ptr prev_block_prov;
     lib_prodiver_ptr lib_prov;

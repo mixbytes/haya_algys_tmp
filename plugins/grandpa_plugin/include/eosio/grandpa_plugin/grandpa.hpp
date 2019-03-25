@@ -171,6 +171,9 @@ using event_channel_ptr = std::shared_ptr<event_channel>;
 using prev_block_prodiver = provider<fc::optional<block_id_type>, block_id_type>; // return prev block id or null if block absent
 using prev_block_prodiver_ptr = std::shared_ptr<prev_block_prodiver>;
 
+using finality_channel = channel<const block_id_type&>;
+using finality_channel_ptr = std::shared_ptr<finality_channel>;
+
 using lib_prodiver = provider<block_id_type>; // return current lib block id
 using lib_prodiver_ptr = std::shared_ptr<lib_prodiver>;
 
@@ -197,6 +200,11 @@ public:
         return *this;
     }
 
+    grandpa& set_finality_channel(const finality_channel_ptr& ptr) {
+        _finality_channel = ptr;
+        return *this;
+    }
+
     grandpa& set_prev_block_provider(const prev_block_prodiver_ptr& ptr) {
         _prev_block_provider = ptr;
         return *this;
@@ -220,6 +228,7 @@ public:
     void start() {
         FC_ASSERT(_in_net_channel && _in_event_channel, "in channels should be inited");
         FC_ASSERT(_out_net_channel, "out channels should be inited");
+        FC_ASSERT(_finality_channel, "finality channel should be inited");
         FC_ASSERT(_prev_block_provider, "prev block provider should be inited");
         FC_ASSERT(_lib_provider, "LIB provider should be inited");
         FC_ASSERT(_prods_provider, "producer provider should be inited");
@@ -263,6 +272,7 @@ private:
     net_channel_ptr _in_net_channel;
     net_channel_ptr _out_net_channel;
     event_channel_ptr _in_event_channel;
+    finality_channel_ptr _finality_channel;
     prev_block_prodiver_ptr _prev_block_provider;
     lib_prodiver_ptr _lib_provider;
     prods_provider_ptr _prods_provider;
@@ -320,12 +330,6 @@ private:
         }
     }
 #endif
-
-    // void do_bft_finalize(const block_id_type& block_id) {
-    //     app().get_io_service().post([this, bid = block_id]() {
-    //         app().get_plugin<chain_plugin>().chain().bft_finalize(bid);
-    //     });
-    // }
 
     auto get_lib() -> block_id_type {
         return _lib_provider->get();
@@ -666,7 +670,7 @@ private:
         }
 
         if (node_ptr->confirmation_data.size() >= bft_threshold()) {
- //           do_bft_finalize(id);
+            _finality_channel->send(id);
             wlog("Grandpa finalized block, id: ${id}, num: ${num}",
                 ("id", id)
                 ("num", num(id))
