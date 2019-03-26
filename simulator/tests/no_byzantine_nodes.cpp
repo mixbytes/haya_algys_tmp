@@ -13,31 +13,26 @@ using namespace std;
 
 using std::string;
 
-//TEST(honest_nodes, eos_finality) {
-//    auto t = TestRunner(3);
-//    vector<pair<int, int> > v0{{1, 2}, {2, 10}};
-//    graph_type g;
-//    g.push_back(v0);
-//    t.load_graph(g);
-//    t.add_stop_task(2102);
-//    t.run<Node>();
-//    for (int i = 0; i < 3; i++) {
-//        auto& db = t.get_db(i);
-//        EXPECT_EQ(get_block_height(db.last_irreversible_block_id()), 2);
-//    }
-//}
-
-TEST(honest_nodes, grandpa_finality) {
-    auto t = TestRunner(3);
+TEST(honest_nodes, eos_finality) {
+    auto runner = TestRunner(3);
     vector<pair<int, int> > v0{{1, 2}, {2, 10}};
-    graph_type g;
-    g.push_back(v0);
-    t.load_graph(g);
-    t.add_stop_task(1503);
-    t.run<GrandpaNode>();
-    for (int i = 0; i < 3; i++) {
-        auto& db = t.get_db(i);
-        cout << "Checking node " << i << endl;
-        EXPECT_EQ(get_block_height(db.last_irreversible_block_id()), 2);
-    }
+    graph_type g{v0};
+    runner.load_graph(g);
+    runner.add_stop_task(4 * TestRunner::SLOT_MS);
+    runner.run<Node>();
+    EXPECT_EQ(get_block_height(runner.get_db(0).last_irreversible_block_id()), 1);
+    EXPECT_EQ(get_block_height(runner.get_db(1).last_irreversible_block_id()), 1);
+    EXPECT_EQ(get_block_height(runner.get_db(2).last_irreversible_block_id()), 1);
+}
+
+TEST(honest_nodes, eos_master_chain_height) {
+    auto runner = TestRunner(3);
+    vector<pair<int, int> > v0{{1, 2}, {2, TestRunner::SLOT_MS}};
+    graph_type g{v0};
+    runner.load_graph(g);
+    runner.add_stop_task(TestRunner::SLOT_MS);
+    runner.run<Node>();
+    EXPECT_EQ(get_block_height(runner.get_db(0).get_master_block_id()), 1);
+    EXPECT_EQ(get_block_height(runner.get_db(1).get_master_block_id()), 1);
+    EXPECT_EQ(get_block_height(runner.get_db(2).get_master_block_id()), 0);
 }
