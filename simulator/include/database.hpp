@@ -89,6 +89,10 @@ public:
         return root->block_id;
     }
 
+    block_id_type get_master_block_id() const {
+        return get_master_head()->block_id;
+    }
+
     fork_db_node_ptr get_master_head() const {
         return find_master_head(root, 0).node;
     }

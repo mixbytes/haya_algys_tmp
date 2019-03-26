@@ -63,9 +63,6 @@ struct Task {
 using matrix_type = vector<vector<int> >;
 using graph_type = vector<vector<pair<int, int>>>;
 
-static Clock tester_clock(0);
-
-
 class Network {
 public:
     Network() = delete;
@@ -80,6 +77,9 @@ public:
     template <typename T>
     void bcast(const T&);
     Network(Network&&) = default;
+    TestRunner* get_runner() const {
+        return runner;
+    }
 private:
     uint32_t node_id;
     TestRunner* runner;
@@ -113,16 +113,18 @@ public:
         }
     }
 
+    Clock get_clock() const;
+
     virtual void on_receive(uint32_t from, void *) {
         std::cout << "Received from " << from << std::endl;
     }
 
     virtual void on_new_peer_event(uint32_t from) {
-        std::cout << "On new peer event handled by " << id << " at " << tester_clock.now() << endl;
+        std::cout << "On new peer event handled by " << id << " at " << get_clock().now() << endl;
     }
 
     virtual void on_accepted_block_event(block_id_type id) {
-        std::cout << "On accepted block event handled by " << id << " at " << tester_clock.now() << endl;
+        std::cout << "On accepted block event handled by " << id << " at " << get_clock().now() << endl;
     }
 
     uint32_t id;
@@ -134,8 +136,8 @@ public:
 class TestRunner {
 public:
     TestRunner() = default;
-    explicit TestRunner(int instances, size_t slot_ms_ = 500, size_t blocks_per_slot_ = 1) :
-        slot_ms(slot_ms_), blocks_per_slot(blocks_per_slot_) {
+    explicit TestRunner(int instances, size_t blocks_per_slot_ = 1) :
+        blocks_per_slot(blocks_per_slot_) {
             init_runner_data(instances);
     }
 
@@ -200,7 +202,7 @@ public:
         stringstream ss;
         ss << "[Node] #" << node->id << " ";
         auto node_id = ss.str();
-        cout << node_id << "Generating blocks node_id=" << " at " << tester_clock.now() << endl;
+        cout << node_id << "Generating blocks node_id=" << " at " << clock.now() << endl;
         cout << node_id << "LIB " << db.last_irreversible_block_id() << endl;
         auto head = db.get_master_head();
         auto head_block_height = fc::endian_reverse_u32(head->block_id._hash[0]);
@@ -241,23 +243,23 @@ public:
         add_task(std::move(task));
     }
 
-//    void add_update_delay_task(uint32_t at, size_t row, size_t col, int delay) {
-//        Task task{RUNNER_ID, RUNNER_ID, at,
-//                  [&](NodePtr n) { delay_matrix[row][col] = delay; }
-//        };
-//        add_task(std::move(task));
-//    }
+    void add_update_delay_task(uint32_t at, size_t row, size_t col, int delay) {
+        Task task{RUNNER_ID, RUNNER_ID, at,
+                  [&](NodePtr n) { delay_matrix[row][col] = delay; }
+        };
+        add_task(std::move(task));
+    }
 
     void schedule_producers() {
         cout << "[TaskRunner] Scheduling PRODUCERS " << endl;
         auto ordering = get_ordering();
-        auto now = tester_clock.now();
+        auto now = clock.now();
         auto instances = get_instances();
 
         for (int i = 0; i < instances; i++) {
             int producer_id = ordering[i];
             Task task;
-            task.at = now + i * slot_ms;
+            task.at = now + i * SLOT_MS;
             task.to = producer_id;
             task.cb = [&](NodePtr node) {
                 auto chain = create_blocks(node);
@@ -266,7 +268,7 @@ public:
             add_task(std::move(task));
         }
 
-        schedule_time = now + instances * slot_ms;
+        schedule_time = now + instances * SLOT_MS;
         add_schedule_task(schedule_time);
     }
 
@@ -274,7 +276,7 @@ public:
         uint32_t from = node->id;
         for (uint32_t to = 0; to < get_instances(); to++) {
             if (from != to && dist_matrix[from][to] != -1) {
-                Task task{from, to, tester_clock.now() + dist_matrix[from][to]};
+                Task task{from, to, clock.now() + dist_matrix[from][to]};
                 task.cb = [chain=chain](NodePtr node) {
                     node->apply_chain(chain);
                 };
@@ -293,7 +295,7 @@ public:
             auto task = timeline.top();
             cout << "[TaskRunner] " << "current_time=" << task.at << " schedule_time=" << schedule_time << endl;
             timeline.pop();
-            tester_clock.set(task.at);
+            clock.set(task.at);
             if (task.to == RUNNER_ID) {
                 cout << "[TaskRunner] Executing task for " << "TaskRunner" << endl;
                 task.cb(nullptr);
@@ -330,6 +332,10 @@ public:
         return nodes[index]->db;
     }
 
+    const Clock& get_clock() {
+        return clock;
+    }
+
     void add_task(Task && task) {
         timeline.push(task);
     }
@@ -342,7 +348,7 @@ public:
     const int DELAY_MS = 10;
     const uint32_t RUNNER_ID = 10000000;
 
-    size_t slot_ms;
+    static const size_t SLOT_MS = 500;
     size_t blocks_per_slot;
     bool should_stop = false;
 
@@ -413,6 +419,7 @@ private:
     matrix_type dist_matrix;
     priority_queue<Task> timeline;
     uint32_t schedule_time = 0;
+    Clock clock;
 };
 
 
@@ -424,7 +431,7 @@ void Network::send(uint32_t to, const T& msg) {
     runner->add_task(Task {
         node_id,
         to,
-        tester_clock.now() + matrix[node_id][to],
+        get_runner()->get_clock().now() + matrix[node_id][to],
         [node_id = node_id, msg = msg](NodePtr n) {
             n->on_receive(node_id, (void*)&msg);
         }
@@ -434,4 +441,8 @@ void Network::send(uint32_t to, const T& msg) {
 template <typename T>
 void Network::bcast(const T& msg) {
     //TODO bcast to all nodes with calculate routes
+}
+
+Clock Node::get_clock() const {
+    return net.get_runner()->get_clock();
 }
