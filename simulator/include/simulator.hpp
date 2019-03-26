@@ -218,6 +218,9 @@ public:
             cout << blocks[i] << ", ";
         }
         db.insert(head, blocks);
+        for (auto& block_id : blocks) {
+            node->on_accepted_block_event(block_id);
+        }
         cout << endl;
         return fork_db_chain_type{head->block_id, blocks};
     }
@@ -237,15 +240,15 @@ public:
     }
 
     void add_stop_task(uint32_t at) {
-        Task task{RUNNER_ID, RUNNER_ID, at,
+        Task task{RUNNER_ID, RUNNER_ID, DELAY_MS + at,
                   [&](NodePtr n) { should_stop = true; }
                  };
         add_task(std::move(task));
     }
 
     void add_update_delay_task(uint32_t at, size_t row, size_t col, int delay) {
-        Task task{RUNNER_ID, RUNNER_ID, at,
-                  [&](NodePtr n) { delay_matrix[row][col] = delay; }
+        Task task{RUNNER_ID, RUNNER_ID, DELAY_MS + at,
+                  [&](NodePtr n) { delay_matrix[row][col] = delay_matrix[col][row] = delay; }
         };
         add_task(std::move(task));
     }
@@ -290,7 +293,8 @@ public:
         init_nodes<TNode>(get_instances());
         init_connections();
 
-        schedule_producers();
+        add_schedule_task(schedule_time);
+
         while (!should_stop) {
             auto task = timeline.top();
             cout << "[TaskRunner] " << "current_time=" << task.at << " schedule_time=" << schedule_time << endl;
@@ -345,10 +349,11 @@ public:
     }
 
     const block_id_type genesys_block;
-    const int DELAY_MS = 10;
     const uint32_t RUNNER_ID = 10000000;
 
-    static const size_t SLOT_MS = 500;
+    static const uint32_t SLOT_MS = 500;
+    static const uint32_t DELAY_MS = 500;
+
     size_t blocks_per_slot;
     bool should_stop = false;
 
@@ -375,7 +380,7 @@ private:
             for (uint32_t to = 0; to < get_instances(); to++) {
                 int delay = delay_matrix[from][to];
                 if (from != to && delay != -1) {
-                    add_task(Task{from, to, static_cast<uint32_t>(delay),
+                    add_task(Task{from, to, static_cast<uint32_t>(0),
                                        [from](NodePtr n){ n->on_new_peer_event(from); }});
                 }
             }
@@ -418,7 +423,7 @@ private:
     matrix_type delay_matrix;
     matrix_type dist_matrix;
     priority_queue<Task> timeline;
-    uint32_t schedule_time = 0;
+    uint32_t schedule_time = DELAY_MS;
     Clock clock;
 };
 
