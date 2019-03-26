@@ -30,3 +30,6 @@
 [submodule "libraries/wabt"]
 	path = libraries/wabt
 	url = https://github.com/EOSIO/wabt
+[submodule "plugins/telemetry_plugin/lib/prometheus-cpp"]
+	path = plugins/telemetry_plugin/lib/prometheus-cpp
+	url = git://github.com/jupp0r/prometheus-cpp.git
