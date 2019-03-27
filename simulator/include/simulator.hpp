@@ -55,8 +55,8 @@ struct Task {
     uint32_t at;
     function<void(NodePtr)> cb;
 
-    bool operator<(const Task& m) const {
-        return at > m.at;
+    bool operator<(const Task& task) const {
+        return at > task.at || (at == task.at && to < task.to);
     }
 };
 
@@ -197,32 +197,20 @@ public:
         count_dist_matrix();
     }
 
-    fork_db_chain_type create_blocks(NodePtr node) {
+    fork_db_chain_type create_block(NodePtr node) {
         auto& db = node->db;
         stringstream ss;
         ss << "[Node] #" << node->id << " ";
         auto node_id = ss.str();
-        cout << node_id << "Generating blocks node_id=" << " at " << clock.now() << endl;
+        cout << node_id << "Generating block" << " at " << clock.now() << endl;
         cout << node_id << "LIB " << db.last_irreversible_block_id() << endl;
         auto head = db.get_master_head();
         auto head_block_height = fc::endian_reverse_u32(head->block_id._hash[0]);
         cout << node_id << "Head block height: " << head_block_height << endl;
-
         cout << node_id << "Building on top of " << head->block_id << endl;
-        cout << node_id << "New blocks: ";
-
-        vector<block_id_type> blocks(blocks_per_slot);
-        for (int i = 0; i < blocks_per_slot; i++) {
-            auto block_height = head_block_height + i + 1;
-            blocks[i] = generate_block(block_height);
-            cout << blocks[i] << ", ";
-        }
-        db.insert(head, blocks);
-        for (auto& block_id : blocks) {
-            node->on_accepted_block_event(block_id);
-        }
-        cout << endl;
-        return fork_db_chain_type{head->block_id, blocks};
+        auto new_block_id = generate_block(head_block_height + 1);
+        cout << node_id << "New block: " << new_block_id << endl;
+        return {head->block_id, {new_block_id}};
     }
 
     vector<int> get_ordering() {
@@ -253,29 +241,40 @@ public:
         add_task(std::move(task));
     }
 
+    void schedule_producer(uint32_t start_ms, uint32_t producer_id) {
+        for (int i = 0; i < blocks_per_slot; i++) {
+            Task task;
+            task.at = start_ms + i * BLOCK_GEN_MS;
+            task.to = producer_id;
+            task.cb = [this](NodePtr node) {
+                auto block = create_block(node);
+                node->db.insert(block);
+                relay_block(node, block);
+            };
+            add_task(std::move(task));
+        }
+    }
+
     void schedule_producers() {
         cout << "[TaskRunner] Scheduling PRODUCERS " << endl;
+        cout << "[TaskRunner] Ordering:  " << "[ " ;
         auto ordering = get_ordering();
+        for (auto x : ordering) {
+            cout << x << " ";
+        }
+        cout << "]" << endl;
         auto now = clock.now();
         auto instances = get_instances();
 
         for (int i = 0; i < instances; i++) {
-            int producer_id = ordering[i];
-            Task task;
-            task.at = now + i * SLOT_MS;
-            task.to = producer_id;
-            task.cb = [&](NodePtr node) {
-                auto chain = create_blocks(node);
-                relay_blocks(node, chain);
-            };
-            add_task(std::move(task));
+            schedule_producer(now + i * get_slot_ms(), ordering[i]);
         }
 
-        schedule_time = now + instances * SLOT_MS;
+        schedule_time = now + instances * get_slot_ms();
         add_schedule_task(schedule_time);
     }
 
-    void relay_blocks(NodePtr node, const fork_db_chain_type& chain) {
+    void relay_block(NodePtr node, const fork_db_chain_type& chain) {
         uint32_t from = node->id;
         for (uint32_t to = 0; to < get_instances(); to++) {
             if (from != to && dist_matrix[from][to] != -1) {
@@ -292,9 +291,13 @@ public:
     void run() {
         init_nodes<TNode>(get_instances());
         init_connections();
-
         add_schedule_task(schedule_time);
+        run_loop();
+    }
 
+    void run_loop() {
+        cout << "[TaskRunner] " << "Run loop " << endl;
+        should_stop = false;
         while (!should_stop) {
             auto task = timeline.top();
             cout << "[TaskRunner] " << "current_time=" << task.at << " schedule_time=" << schedule_time << endl;
@@ -348,11 +351,15 @@ public:
         return 2 * get_instances() / 3 + 1;
     }
 
+    uint32_t get_slot_ms() {
+        return BLOCK_GEN_MS * blocks_per_slot;
+    }
+
     const block_id_type genesys_block;
     const uint32_t RUNNER_ID = 10000000;
 
-    static const uint32_t SLOT_MS = 500;
     static const uint32_t DELAY_MS = 500;
+    static const uint32_t BLOCK_GEN_MS = 500;
 
     size_t blocks_per_slot;
     bool should_stop = false;
@@ -369,7 +376,8 @@ private:
     void init_nodes(uint32_t count) {
         nodes.clear();
         for (auto i = 0; i < count; ++i) {
-            auto conf_number = blocks_per_slot * bft_threshold();
+            // See https://bit.ly/2Wp3Nsf
+            auto conf_number = 2 * blocks_per_slot * bft_threshold();
             auto node = std::make_shared<TNode>(i, Network(i, this), fork_db(genesys_block, conf_number));
             nodes.push_back(std::static_pointer_cast<Node>(node));
         }
