@@ -58,7 +58,7 @@ struct Task {
     bool operator<(const Task& task) const {
         // TODO task_runner id = 0
         // task runner has a higher priority
-        return at > task.at || (at == task.at && from < task.from);
+        return at > task.at;
     }
 };
 
@@ -214,22 +214,6 @@ public:
         cout << node_id << "New block: " << new_block_id << endl;
         return {head->block_id, {new_block_id}};
     }
-
-//    fork_db_chain_type create_blocks(NodePtr node) {
-//
-//        vector<block_id_type> blocks(blocks_per_slot);
-//        for (int i = 0; i < blocks_per_slot; i++) {
-//            auto block_height = head_block_height + i + 1;
-//            blocks[i] = generate_block(block_height);
-//            cout << blocks[i] << ", ";
-//        }
-////        for (auto& block_id : blocks) {
-////            Task accepted_block_task{node->id, node->id, clock.now() + BLOCK_GEN_MS};
-////            node->on_accepted_block_event(block_id);
-////        }
-//        cout << endl;
-//        return fork_db_chain_type{head->block_id, blocks};
-//    }
 
     vector<int> get_ordering() {
         vector<int> permutation(get_instances());
