@@ -56,9 +56,7 @@ struct Task {
     function<void(NodePtr)> cb;
 
     bool operator<(const Task& task) const {
-        // TODO task_runner id = 0
-        // task runner has a higher priority
-        return at > task.at;
+        return at > task.at || (at == task.at && to < task.to);
     }
 };
 
@@ -230,7 +228,7 @@ public:
     }
 
     void add_stop_task(uint32_t at) {
-        Task task{RUNNER_ID, RUNNER_ID, DELAY_MS + at - 1,
+        Task task{RUNNER_ID, RUNNER_ID, DELAY_MS + at,
                   [&](NodePtr n) { should_stop = true; }
                  };
         add_task(std::move(task));
@@ -269,7 +267,6 @@ public:
         auto instances = get_instances();
 
         for (int i = 0; i < instances; i++) {
-//            int producer_id = ordering[i];
             schedule_producer(now + i * get_slot_ms(), ordering[i]);
         }
 
