@@ -55,8 +55,10 @@ struct Task {
     uint32_t at;
     function<void(NodePtr)> cb;
 
-    bool operator<(const Task& m) const {
-        return at > m.at;
+    bool operator<(const Task& task) const {
+        // TODO task_runner id = 0
+        // task runner has a higher priority
+        return at > task.at || (at == task.at && from < task.from);
     }
 };
 
@@ -202,7 +204,7 @@ public:
         stringstream ss;
         ss << "[Node] #" << node->id << " ";
         auto node_id = ss.str();
-        cout << node_id << "Generating blocks node_id=" << " at " << clock.now() << endl;
+        cout << node_id << "Generating blocks" << " at " << clock.now() << endl;
         cout << node_id << "LIB " << db.last_irreversible_block_id() << endl;
         auto head = db.get_master_head();
         auto head_block_height = fc::endian_reverse_u32(head->block_id._hash[0]);
@@ -255,7 +257,12 @@ public:
 
     void schedule_producers() {
         cout << "[TaskRunner] Scheduling PRODUCERS " << endl;
+        cout << "[TaskRunner] Ordering:  " << "[ " ;
         auto ordering = get_ordering();
+        for (auto x : ordering) {
+            cout << x << " ";
+        }
+        cout << "]" << endl;
         auto now = clock.now();
         auto instances = get_instances();
 
