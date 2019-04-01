@@ -17,12 +17,21 @@
 
 using namespace std;
 
-ostream& operator<<(ostream& os, const block_id_type& block) {
+static ostream& operator<<(ostream& os, const block_id_type& block) {
     os << block.str().substr(16, 4);
     return os;
 }
 
-uint32_t get_block_height(const block_id_type& id) {
+static ostream& operator<<(ostream& os, const fork_db_chain_type& chain) {
+    os << "[ " << chain.base_block;
+    for (const auto& block : chain.blocks) {
+        os << " -> " << block;
+    }
+    os << " ]";
+    return os;
+}
+
+static uint32_t get_block_height(const block_id_type& id) {
     return fc::endian_reverse_u32(id._hash[0]);
 }
 
@@ -54,6 +63,14 @@ struct Task {
     uint32_t to;
     uint32_t at;
     function<void(NodePtr)> cb;
+    enum task_type {
+        GENERAL,
+        STOP,
+        UPDATE_DELAY,
+        SYNC,
+        CREATE_BLOCK,
+    };
+    task_type type = GENERAL;
 
     bool operator<(const Task& task) const {
         return at > task.at || (at == task.at && to < task.to);
@@ -96,24 +113,39 @@ public:
     void send(uint32_t to, const T& msg) {
         net.send(to, msg);
     }
-
-    void apply_chain(const fork_db_chain_type& chain) {
+    
+    bool apply_chain(const fork_db_chain_type& chain) {
         stringstream ss;
         ss << "[Node] #" << id << " ";
         auto node_id = ss.str();
         cout << node_id << "Received " << chain.blocks.size() << " blocks " << endl;
-        cout << node_id << "Ids [ " << chain.base_block << " -> ";
-        for (auto& block_id : chain.blocks) {
-            cout << block_id << ", ";
+        cout << node_id << chain << endl;
+
+        if (db.find(chain.blocks.back())) {
+            cout << node_id << "Already got chain head. Skipping chain " << endl;
+            return false;
         }
-        cout << "]" << endl;
-        db.insert(chain);
+
+        if (get_block_height(chain.blocks.back()) <= get_block_height(db.get_master_block_id())) {
+            cout << node_id << "Current master is not smaller than chain head. Skipping chain";
+            return false;
+        }
+
+        try {
+            db.insert(chain);
+        } catch (const ForkDbInsertException&) {
+            cout << node_id << "Failed to apply chain" << endl;
+            pending_chains.push(chain);
+            return false;
+        }
+
         for (auto& block_id : chain.blocks) {
             on_accepted_block_event(block_id);
         }
+        return true;
     }
 
-    Clock get_clock() const;
+    inline Clock get_clock() const;
 
     virtual void on_receive(uint32_t from, void *) {
         std::cout << "Received from " << from << std::endl;
@@ -124,13 +156,20 @@ public:
     }
 
     virtual void on_accepted_block_event(block_id_type id) {
-        std::cout << "On accepted block event handled by " << id << " at " << get_clock().now() << endl;
+        std::cout << "On accepted block event handled by " << this->id << " at " << get_clock().now() << endl;
     }
 
     uint32_t id;
     bool is_producer = true;
+
     Network net;
     fork_db db;
+
+    queue<fork_db_chain_type> pending_chains;
+
+    bool should_sync() const {
+        return !pending_chains.empty();
+    }
 };
 
 class TestRunner {
@@ -236,9 +275,14 @@ public:
 
     void add_update_delay_task(uint32_t at, size_t row, size_t col, int delay) {
         Task task{RUNNER_ID, RUNNER_ID, DELAY_MS + at,
-                  [&](NodePtr n) { delay_matrix[row][col] = delay_matrix[col][row] = delay; }
+                  [this, row, col, delay](NodePtr n) {  update_delay(row, col, delay); }
         };
         add_task(std::move(task));
+    }
+
+    void update_delay(uint32_t row, uint32_t col, int delay) {
+        delay_matrix[row][col] = delay_matrix[col][row] = delay;
+        count_dist_matrix();
     }
 
     void schedule_producer(uint32_t start_ms, uint32_t producer_id) {
@@ -249,8 +293,10 @@ public:
             task.cb = [this](NodePtr node) {
                 auto block = create_block(node);
                 node->db.insert(block);
+                node->on_accepted_block_event(block.blocks[0]);
                 relay_block(node, block);
             };
+            task.type = Task::CREATE_BLOCK;
             add_task(std::move(task));
         }
     }
@@ -287,6 +333,42 @@ public:
         }
     }
 
+    void schedule_sync(NodePtr node) {
+        Task task{RUNNER_ID, node->id};
+        // syncing with the best peer aka largest master block height
+        NodePtr best_peer = node;
+        uint32_t best_peer_master_height = get_block_height(best_peer->db.get_master_block_id());
+        for (uint32_t peer = 0; peer < get_instances(); peer++) {
+            auto current_peer = nodes[peer];
+            auto current_peer_master_height = get_block_height(current_peer->db.get_master_block_id());
+            if (current_peer_master_height > best_peer_master_height) {
+                best_peer = current_peer;
+                best_peer_master_height = current_peer_master_height;
+            }
+        }
+        task.at = clock.now() + dist_matrix[node->id][best_peer->id];
+        task.cb = [best_peer](NodePtr node) {
+            cout << "[Node #" << node->id << "]" " Executing sync " << endl;
+            const auto& peer_db = best_peer->db;
+            auto& node_db = node->db;
+            // sync done
+            cout << "[Node #" << node->id << "]" " best_peer=" << best_peer->id << endl;
+            node_db.set_root(deep_copy(peer_db.get_root()));
+            // insert chains that you failed to insert previously
+            auto& pending_chains = node->pending_chains;
+            while (!pending_chains.empty()) {
+                auto chain = pending_chains.front();
+                cout << "[Node #" << node->id << "]" " Applying chain " << chain << endl;
+                pending_chains.pop();
+                if (!node->apply_chain(chain)) {
+                    break;
+                }
+            }
+        };
+        task.type = Task::SYNC;
+        add_task(std::move(task));
+    };
+
     template <typename TNode = Node>
     void run() {
         init_nodes<TNode>(get_instances());
@@ -307,11 +389,21 @@ public:
                 cout << "[TaskRunner] Executing task for " << "TaskRunner" << endl;
                 task.cb(nullptr);
             } else {
-                cout << "[TaskRunner] Executing task for " << task.to << endl;
-                task.cb(nodes[task.to]);
+                cout << "[TaskRunner] Gotta task for " << task.to << endl;
+                auto node = nodes[task.to];
+                if (node->should_sync() && task.type != Task::SYNC) {
+                    cout << "[TaskRunner] Skipping task cause node is not synchronized" << endl;
+                } else {
+                    cout << "[TaskRunner] Executing task " << endl;
+                    task.cb(node);
+                }
+                if (node->should_sync()) {
+                    cout << "[TaskRunner] Scheduling sync for node " << node->id << endl;
+                    schedule_sync(node);
+                }
             }
 
-            this_thread::sleep_for(chrono::milliseconds(0));
+//            this_thread::sleep_for(chrono::milliseconds(1000));
         }
     }
 
@@ -456,6 +548,6 @@ void Network::bcast(const T& msg) {
     //TODO bcast to all nodes with calculate routes
 }
 
-Clock Node::get_clock() const {
+inline Clock Node::get_clock() const {
     return net.get_runner()->get_clock();
 }
