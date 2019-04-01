@@ -24,19 +24,19 @@ public:
     }
 
     void on_receive(uint32_t from, void* msg) override {
-        cout << "[Node] #" << id << " on_receive " << endl;
+        cout << "[Node] #" << this->id << " on_receive " << endl;
         auto data = *static_cast<grandpa_net_msg*>(msg);
         data.ses_id = from;
         in_net_ch->send(data);
     }
 
     void on_new_peer_event(uint32_t id) override {
-        cout << "[Node] #" << id << " on_new_peer_event " << endl;
+        cout << "[Node] #" << this->id << " on_new_peer_event " << endl;
         ev_ch->send(grandpa_event { ::on_new_peer_event { id } });
     }
 
     void on_accepted_block_event(block_id_type id) override {
-        cout << "[Node] #" << id << " on_accepted_block_event " << endl;
+        cout << "[Node] #" << this->id << " on_accepted_block_event " << endl;
         ev_ch->send(grandpa_event { ::on_accepted_block_event { id } });
     }
 
