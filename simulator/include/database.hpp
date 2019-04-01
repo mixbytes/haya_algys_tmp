@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <map>
+#include <exception>
 #include <types.hpp>
 
 using std::vector;
@@ -27,6 +28,19 @@ struct fork_db_node {
     }
 };
 
+static fork_db_node_ptr deep_copy(fork_db_node_ptr src) {
+    fork_db_node_ptr dest(new fork_db_node);
+    dest->block_id = src->block_id;
+    dest->parent = nullptr;
+    dest->adjacent_nodes.resize(src->adjacent_nodes.size());
+    for (auto src_iter = src->adjacent_nodes.begin(), dest_iter = dest->adjacent_nodes.begin();
+                src_iter != src->adjacent_nodes.end(); src_iter++, dest_iter++) {
+        *dest_iter = deep_copy(*src_iter);
+        (*dest_iter)->parent = dest;
+    }
+    return dest;
+}
+
 struct block_info {
     fork_db_node_ptr node;
     size_t height;
@@ -38,6 +52,8 @@ struct fork_db_chain_type {
 };
 
 using fork_db_chain_type_ptr = shared_ptr<fork_db_chain_type>;
+
+struct ForkDbInsertException : public std::exception {};
 
 class fork_db {
 public:
@@ -67,7 +83,9 @@ public:
 
     void insert(const fork_db_chain_type& chain) {
         auto node = find(chain.base_block);
-        assert(node);
+        if (!node) {
+            throw ForkDbInsertException();
+        }
         insert(node, chain.blocks);
     }
 
@@ -105,6 +123,10 @@ public:
 
     fork_db_node_ptr get_root() const {
         return root;
+    }
+
+    void set_root(fork_db_node_ptr root_) {
+        root = root_;
     }
 
 private:
