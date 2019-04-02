@@ -1,16 +1,15 @@
 /**
  *  @file
- *  @copyright defined in eos/LICENSE
+ *  @copyright defined in cyberos/LICENSE
  */
 #include <eosio/telemetry_plugin/telemetry_plugin.hpp>
 #include <fc/exception/exception.hpp>
 #include <eosio/chain/plugin_interface.hpp>
-#include <eosio/chain/block_state.hpp>
 #include <prometheus/exposer.h>
-#include <prometheus/registry.h>
-#include <ctime>
 
-#define LATENCY_HISTOGRAM_KEYPOINTS 1000000, 2000000, 180000000
+#define LATENCY_HISTOGRAM_KEYPOINTS \
+    {1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 15000, 20000, 180000}
+
 
 namespace eosio {
     using namespace chain::plugin_interface;
@@ -19,47 +18,22 @@ namespace eosio {
     static appbase::abstract_plugin &_telemetry_plugin = app().register_plugin<telemetry_plugin>();
 
     class telemetry_plugin_impl {
-
     private:
         channels::accepted_block::channel_type::handle _on_accepted_block_handle;
         channels::irreversible_block::channel_type::handle _on_irreversible_block_handle;
 
-        shared_ptr<Registry> registry;
-        Exposer *exposer = nullptr;
+        std::unique_ptr<Exposer> exposer;
+        std::shared_ptr<Registry> registry;
 
-        Counter *accepted_trx_count = nullptr;
-        Gauge *last_irreversible_latency = nullptr;
-        Histogram *irreversible_latency_hist = nullptr;
+        std::unique_ptr<Counter> accepted_trx_count;
+        std::unique_ptr<Histogram> irreversible_latency_hist;
+        std::unique_ptr<Gauge> last_irreversible_latency;
 
-    public:
-        void initialize(const std::string &endpoint, const std::string &uri, const size_t threads) {
-            exposer = new Exposer{endpoint, uri, threads};
+        void start_server() {
+            exposer = std::make_unique<Exposer>(endpoint, uri, threads);
+        }
 
-            registry = std::make_shared<Registry>();
-
-            accepted_trx_count = &BuildCounter()
-                    .Name("accepted_trx_total")
-                    .Help("Total amount of transactions accepted")
-                    .Register(*registry)
-                    .Add({});
-
-            irreversible_latency_hist = &BuildHistogram()
-                    .Name("irreversible_latency")
-                    .Help("The latency of irreversible blocks")
-                    .Register(*registry)
-                    .Add({},
-                         Histogram::BucketBoundaries{
-                                 LATENCY_HISTOGRAM_KEYPOINTS
-                         });
-
-            last_irreversible_latency = &BuildGauge()
-                    .Name("last_irreversible_latency")
-                    .Help("The latency of the last irreversible blocks")
-                    .Register(*registry)
-                    .Add({});
-
-            exposer->RegisterCollectable(registry);
-
+        void add_event_handlers() {
             _on_accepted_block_handle = app().get_channel<channels::accepted_block>()
                     .subscribe([this](block_state_ptr s) {
                         accepted_trx_count->Increment(s.get()->trxs.size());
@@ -68,14 +42,58 @@ namespace eosio {
             _on_irreversible_block_handle = app().get_channel<channels::irreversible_block>()
                     .subscribe([this](block_state_ptr s) {
                         fc::microseconds latency = fc::time_point::now() - s.get()->header.timestamp.to_time_point();
-                        last_irreversible_latency->Set(latency.count());
-                        irreversible_latency_hist->Observe(latency.count());
+                        int64_t latency_millis = latency.count() / 1000;
+                        last_irreversible_latency->Set(latency_millis);
+                        irreversible_latency_hist->Observe(latency_millis);
                     });
         }
 
-        virtual ~telemetry_plugin_impl() {
-            delete exposer;
+        void add_metrics() {
+            registry = std::make_unique<Registry>();
+
+            accepted_trx_count.reset(
+                    &BuildCounter()
+                            .Name("accepted_trx_total")
+                            .Help("Total amount of transactions accepted")
+                            .Register(*registry)
+                            .Add({}));
+
+
+            irreversible_latency_hist.reset(
+                    &BuildHistogram()
+                            .Name("irreversible_latency")
+                            .Help("The latency of irreversible blocks")
+                            .Register(*registry)
+                            .Add({},
+                                 Histogram::BucketBoundaries{
+                                         LATENCY_HISTOGRAM_KEYPOINTS
+                                 })
+            );
+
+            last_irreversible_latency.reset(
+                    &BuildGauge()
+                            .Name("last_irreversible_latency")
+                            .Help("The latency of the last irreversible blocks")
+                            .Register(*registry)
+                            .Add({})
+            );
+
+
+            exposer->RegisterCollectable(std::weak_ptr<Registry>(registry));
         }
+
+    public:
+        std::string endpoint;
+        std::string uri;
+        size_t threads{};
+
+        void initialize() {
+            start_server();
+            add_metrics();
+            add_event_handlers();
+        }
+
+        virtual ~telemetry_plugin_impl() = default;
     };
 
     telemetry_plugin::telemetry_plugin() : my(new telemetry_plugin_impl()) {}
@@ -93,22 +111,27 @@ namespace eosio {
     }
 
     void telemetry_plugin::plugin_initialize(const variables_map &options) {
+        ilog("Initialize telemetry plugin");
         try {
-            my->initialize(
-                    options.at("telemetry-endpoint").as<string>(),
-                    options.at("telemetry-uri").as<string>(),
-                    options.at("telemetry-threads").as<size_t>()
-            );
+            my->endpoint = options.at("telemetry-endpoint").as<string>();
+            my->uri = options.at("telemetry-uri").as<string>();
+            my->threads = options.at("telemetry-threads").as<size_t>();
         }
         FC_LOG_AND_RETHROW();
     }
 
     void telemetry_plugin::plugin_startup() {
-
+        wlog("Telemetry plugin startup");
+        try {
+            my->initialize();
+            ilog("Telemetry plugin started, started listening endpoint (port) ${endpoint} with uri ${uri}",
+                 ("endpoint", my->endpoint)("uri", my->uri));
+        }
+        FC_LOG_AND_RETHROW();
     }
 
     void telemetry_plugin::plugin_shutdown() {
-
+        wlog("Telemetry plugin shutdown");
     }
 
 }
