@@ -10,7 +10,11 @@
 #include <mutex>
 #include <thread>
 #include <condition_variable>
+#include <appbase/application.hpp>
+#include <eosio/chain_plugin/chain_plugin.hpp>
 
+using appbase::app;
+using eosio::chain_plugin;
 
 using ::fc::static_variant;
 using std::shared_ptr;
@@ -136,6 +140,9 @@ struct grandpa_net_msg {
 
 struct on_accepted_block_event {
     block_id_type block_id;
+    block_id_type prev_block_id;
+    public_key_type creator_key;
+    std::set<public_key_type> active_bp_keys;
 };
 
 struct on_irreversible_event {
@@ -225,7 +232,7 @@ public:
         return *this;
     }
 
-    void start() {
+    void start(chain_type_ptr chain) {
         FC_ASSERT(_in_net_channel && _in_event_channel, "in channels should be inited");
         FC_ASSERT(_out_net_channel, "out channels should be inited");
         FC_ASSERT(_finality_channel, "finality channel should be inited");
@@ -238,6 +245,7 @@ public:
             new prefix_chain_tree(std::make_shared<prefix_node>(prefix_node { lib_id }))
         );
         update_lib(lib_id);
+        _prefix_tree_ptr->insert(chain, _private_key.get_public_key());
 
 #ifndef SYNC_GRANDPA
         _thread_ptr.reset(new std::thread([this]() {
@@ -483,22 +491,19 @@ private:
     void on(const on_accepted_block_event& event) {
         dlog("Grandpa on_accepted_block_event event handled, block_id: ${id}, num: ${num}",
             ("id", event.block_id)
+            ("pid", event.prev_block_id)
             ("num", num(event.block_id))
         );
 
-        auto chain_ptr = get_chain_to_tree(event.block_id);
+        auto prev_block_id = event.prev_block_id;
+        auto base_block_ptr = _prefix_tree_ptr->find(prev_block_id);
 
-        if (!chain_ptr) {
-            elog("Grandpa unlinkable block accepted, id: ${id}", ("id", event.block_id));
+        if (!base_block_ptr) {
+            elog("Grandpa unlinkable block accepted, id: ${id}", ("id", prev_block_id));
             return;
         }
-        else {
-            dlog("Chain to tree founded, base: ${base}, size: ${size}",
-                ("base", chain_ptr->base_block)
-                ("size", chain_ptr->blocks.size())
-            );
-        }
 
+        auto chain_ptr = std::make_shared<chain_type>(chain_type{prev_block_id, {event.block_id}});
         auto conf_msg = chain_conf_msg(make_confirmation(*chain_ptr), _private_key);
         chain_ptr->signature = conf_msg.signature;
 
@@ -566,33 +571,6 @@ private:
             return chain.blocks.back();
         else
             return chain.base_block;
-    }
-
-    chain_type_ptr get_chain_to_tree(const block_id_type& to) {
-        auto chain = std::make_shared<chain_type>();
-        auto cur_bid = to;
-
-        while (!_prefix_tree_ptr->find(cur_bid)) {
-            auto prev_block_id = get_prev_block_id(cur_bid);
-
-            if (!prev_block_id) {
-                elog("Grandpa block bot found in fork db, id: ${id}", ("id", cur_bid));
-                elog("Grandpa cannot link block with local tree, id: ${id}", ("id", to));
-                elog("Grandpa lib, id: ${id}, num: ${num}",
-                    ("id", _prefix_tree_ptr->get_root()->block_id)
-                    ("num", num(_prefix_tree_ptr->get_root()->block_id))
-                );
-                return nullptr;
-            }
-
-            chain->blocks.push_back(cur_bid);
-            cur_bid = *prev_block_id;
-        }
-
-        std::reverse(chain->blocks.begin(), chain->blocks.end());
-        chain->base_block = cur_bid;
-
-        return chain;
     }
 
     chain_type_ptr extend_chain(const chain_type_ptr& chain, const block_id_type& from) {

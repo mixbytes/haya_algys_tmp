@@ -148,12 +148,13 @@ private:
     prefix_node_ptr insert_blocks(prefix_node_ptr node, const chain_type_ptr& chain, const vector<block_id_type>& blocks, const public_key_type& pub_key) {
         auto max_conf_node = node;
         node->confirmation_data[pub_key] = chain;
-        dlog("Confirmations, id: ${id}, count: ${count}", ("id", node->block_id)("count", node->confirmation_data.size()));
+        dlog("Base block confirmations, id: ${id}, count: ${count}", ("id", node->block_id)("count", node->confirmation_data.size()));
 
         for (const auto& block_id : blocks) {
+            dlog("Block, id: ${id}", ("id", block_id));
             auto next_node = node->get_matching_node(block_id);
             if (next_node) {
-                dlog("Confirmations, id: ${id}, count: ${count}", ("id", next_node->block_id)("count", next_node->confirmation_data.size()));
+                dlog("Confirmations, count: ${count}", ("count", next_node->confirmation_data.size()));
                 next_node->confirmation_data[pub_key] = chain;
                 if (max_conf_node->confirmation_data.size() <= next_node->confirmation_data.size()) {
                     max_conf_node = next_node;

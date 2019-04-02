@@ -5,6 +5,7 @@
 #include <eosio/chain/plugin_interface.hpp>
 #include <fc/io/json.hpp>
 #include <queue>
+#include <set>
 #include <chrono>
 #include <atomic>
 #include <fc/exception/exception.hpp>
@@ -54,7 +55,17 @@ public:
 
         _on_accepted_block_handle = app().get_channel<channels::accepted_block>()
         .subscribe( [ev_ch]( block_state_ptr s ) {
-            ev_ch->send(grandpa_event { on_accepted_block_event { s->id } });
+            std::set<public_key_type> producer_keys;
+            for (const auto& elem :  s->active_schedule.producers) {
+                producer_keys.insert(elem.block_signing_key);
+            }
+
+            ev_ch->send(grandpa_event { on_accepted_block_event {
+                s->id,
+                s->header.previous,
+                s->block_signing_key,
+                std::move(producer_keys),
+            } });
         });
 
         _on_irb_handle = app().get_channel<channels::irreversible_block>()
@@ -123,7 +134,17 @@ public:
             .set_lib_provider(lib_pr)
             .set_prods_provider(prods_pr);
 
-        _grandpa.start();
+        dlog("Copying master chain from fork_db");
+        const auto& ctrl = app().get_plugin<chain_plugin>().chain();
+        auto current_block = ctrl.head_block_state();
+        chain_type_ptr chain = shared_ptr<chain_type>(new chain_type);
+        while (current_block) {
+            chain->blocks.push_back(current_block->id);
+            current_block = ctrl.fetch_block_state_by_id(current_block->prev());
+        }
+        std::reverse(chain->blocks.begin(), chain->blocks.end());
+        _grandpa.start(chain);
+        dlog("Successfully copied ${amount} blocks", ("amount", chain->blocks.size()));
     }
 
     void stop() {
