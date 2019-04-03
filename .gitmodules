@@ -18,3 +18,7 @@
 [submodule "libraries/yubihsm"]
 	path = libraries/yubihsm
 	url = https://github.com/Yubico/yubihsm-shell
+[submodule "plugins/telemetry_plugin/lib/prometheus-cpp"]
+	path = plugins/telemetry_plugin/lib/prometheus-cpp
+	url = git://github.com/jupp0r/prometheus-cpp.git
+    branch = v0.6.0
