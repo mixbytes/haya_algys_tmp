@@ -49,8 +49,8 @@ public:
 
         subscribe<handshake_msg>(in_net_ch);
         subscribe<handshake_ans_msg>(in_net_ch);
-        subscribe<block_get_conf_msg>(in_net_ch);
-        subscribe<chain_conf_msg>(in_net_ch);
+        subscribe<prevote_msg>(in_net_ch);
+        subscribe<precommit_msg>(in_net_ch);
 
         _on_accepted_block_handle = app().get_channel<channels::accepted_block>()
         .subscribe( [ev_ch]( block_state_ptr s ) {
@@ -70,11 +70,11 @@ public:
         out_net_ch->subscribe([this](const grandpa_net_msg& msg) {
             auto data = msg.data;
             switch (data.which()){
-                case grandpa_net_msg_data::tag<chain_conf_msg>::value:
-                    send(msg.ses_id, data.get<chain_conf_msg>());
+                case grandpa_net_msg_data::tag<prevote_msg>::value:
+                    send(msg.ses_id, data.get<prevote_msg>());
                     break;
-                case grandpa_net_msg_data::tag<block_get_conf_msg>::value:
-                    send(msg.ses_id, data.get<block_get_conf_msg>());
+                case grandpa_net_msg_data::tag<precommit_msg>::value:
+                    send(msg.ses_id, data.get<precommit_msg>());
                     break;
                 case grandpa_net_msg_data::tag<handshake_msg>::value:
                     send(msg.ses_id, data.get<handshake_msg>());
