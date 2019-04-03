@@ -1,7 +1,6 @@
 #pragma once
 
 #include "types.hpp"
-#include "prefix_chain_tree.hpp"
 #include <fc/reflect/reflect.hpp>
 
 using std::vector;
@@ -46,23 +45,32 @@ struct handshake_ans_type {
     block_id_type lib;
 };
 
-struct confirmation_type {
+struct prevote_type {
+    uint32_t round_num;
     block_id_type base_block;
     vector<block_id_type> blocks;
 };
 
+struct precommit_type {
+    uint32_t round_num;
+    digest_type prevote_hash;
+};
+
 using handshake_msg = network_msg<handshake_type>;
 using handshake_ans_msg = network_msg<handshake_ans_type>;
+
 using block_get_conf_msg = network_msg<block_get_conf_type>;
-using chain_conf_msg = network_msg<confirmation_type>;
+
+using prevote_msg = network_msg<prevote_type>;
+using precommit_msg = network_msg<precommit_type>;
 
 
-using chain_conf_msg_ptr = shared_ptr<chain_conf_msg>;
 
+FC_REFLECT(prevote_type, (round_num)(base_block)(blocks))
+FC_REFLECT(precommit_type, (round_num)(prevote_hash))
 
-FC_REFLECT(confirmation_type, (base_block)(blocks))
 FC_REFLECT(block_get_conf_type, (block_id))
 FC_REFLECT(handshake_type, (lib))
 FC_REFLECT(handshake_ans_type, (lib))
-FC_REFLECT_TEMPLATE((typename T), network_msg<T>, (data)(signature))
 
+FC_REFLECT_TEMPLATE((typename T), network_msg<T>, (data)(signature))

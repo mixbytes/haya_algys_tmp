@@ -19,6 +19,12 @@ using std::pair;
 
 using mutex_guard = std::lock_guard<std::mutex>;
 
+using tree_node = prefix_node<prevote_msg>;
+using prefix_tree = prefix_chain_tree<tree_node>;
+
+using tree_node_ptr =std::shared_ptr<tree_node>;
+using prefix_tree_ptr =std::shared_ptr<prefix_tree>;
+
 template <typename message_type>
 class message_queue {
 public:
@@ -126,8 +132,7 @@ protected:
     cb_type cb;
 };
 
-using prefix_chain_tree_ptr = unique_ptr<prefix_chain_tree>;
-using grandpa_net_msg_data = static_variant<chain_conf_msg, block_get_conf_msg, handshake_msg, handshake_ans_msg>;
+using grandpa_net_msg_data = static_variant<handshake_msg, handshake_ans_msg, prevote_msg, precommit_msg>;
 
 struct grandpa_net_msg {
     uint32_t ses_id;
@@ -234,8 +239,8 @@ public:
         FC_ASSERT(_prods_provider, "producer provider should be inited");
 
         auto lib_id = get_lib();
-        _prefix_tree_ptr.reset(
-            new prefix_chain_tree(std::make_shared<prefix_node>(prefix_node { lib_id }))
+        _prefix_tree.reset(
+            new prefix_tree(std::make_shared<tree_node>(tree_node { lib_id }))
         );
         update_lib(lib_id);
 
@@ -262,7 +267,7 @@ private:
     std::unique_ptr<std::thread> _thread_ptr;
     std::atomic<bool> _done { false };
     private_key_type _private_key;
-    prefix_chain_tree_ptr _prefix_tree_ptr;
+    prefix_tree_ptr _prefix_tree;
     std::map<uint32_t, peer_info> _peers;
 
 #ifndef SYNC_GRANDPA
@@ -364,18 +369,13 @@ private:
         const auto& data = msg.data;
 
         switch (data.which()) {
-            case grandpa_net_msg_data::tag<chain_conf_msg>::value:
-                on(ses_id, data.get<chain_conf_msg>());
-                break;
-            case grandpa_net_msg_data::tag<block_get_conf_msg>::value:
-                on(ses_id, data.get<block_get_conf_msg>());
-                break;
+            //TODO process prevote and precommit
             case grandpa_net_msg_data::tag<handshake_msg>::value:
                 on(ses_id, data.get<handshake_msg>());
                 break;
             case grandpa_net_msg_data::tag<handshake_ans_msg>::value:
                 on(ses_id, data.get<handshake_ans_msg>());
-                break;
+               break;
             default:
                 ilog("Grandpa message received, but handler not found, type: ${type}",
                     ("type", data.which())
@@ -384,7 +384,7 @@ private:
         }
     }
 
-    void process_event(const grandpa_event& event) {
+    void process_event(const grandpa_event& event){
         const auto& data = event.data;
         switch (data.which()) {
             case grandpa_event_data::tag<on_accepted_block_event>::value:
@@ -401,62 +401,6 @@ private:
                     ("type", data.which())
                 );
                 break;
-        }
-    }
-
-    void on(uint32_t ses_id, const chain_conf_msg& msg) {
-        dlog("Grandpa chain_conf_msg received, msg: ${msg}, ses_id: ${ses_id}", ("msg", msg)("ses_id", ses_id));
-
-        auto peer_itr = _peers.find(ses_id);
-
-        if (peer_itr == _peers.end()) {
-            wlog("Grandpa handled chain_conf_msg, but peer is unknown, ses_id: ${ses_id}",
-                ("ses_id", ses_id)
-            );
-            return;
-        }
-
-        if (!msg.validate(peer_itr->second.public_key)) {
-            elog("Grandpa confirmation validation fail, ses_id: ${ses_id}",
-                ("ses_id", ses_id)
-            );
-            return;
-        }
-
-        if (!is_producer(peer_itr->second.public_key)) {
-            elog("Grandpa confirmation from non producer, ses_id: ${ses_id}",
-                ("ses_id", ses_id)
-            );
-            return;
-        }
-
-        try {
-            auto chain_ptr = std::make_shared<chain_type>(chain_type { msg.data.base_block, msg.data.blocks, msg.signature });
-            auto max_conf_ptr = _prefix_tree_ptr->insert(chain_ptr, peer_itr->second.public_key);
-
-            try_finalize(max_conf_ptr);
-        }
-        catch (const std::exception& e) {
-            elog("Grandpa chain insert error, e: ${e}", ("e", e.what()));
-
-            // dlog("Granpda requesting confirmations for block, id: ${id}", ("id", msg.data.base_block));
-            // send(ses_id, make_network_msg(block_get_conf_type { msg.data.base_block }, _private_key));
-            return;
-        }
-    }
-
-    void on(uint32_t ses_id, const block_get_conf_msg& msg) {
-        dlog("Grandpa block_get_conf received, msg: ${msg}", ("msg", msg));
-
-        auto node = _prefix_tree_ptr->find(msg.data.block_id);
-
-        if (!node) {
-            elog("Grandpa cannot find block, id: ${id}", ("id", msg.data.block_id));
-            return;
-        }
-
-        for ( auto & conf: node->confirmation_data ) {
-            send(ses_id, chain_conf_msg { { conf.second->base_block, conf.second->blocks }, conf.second->signature });
         }
     }
 
@@ -486,26 +430,8 @@ private:
             ("num", num(event.block_id))
         );
 
-        auto chain_ptr = get_chain_to_tree(event.block_id);
-
-        if (!chain_ptr) {
-            elog("Grandpa unlinkable block accepted, id: ${id}", ("id", event.block_id));
-            return;
-        }
-        else {
-            dlog("Chain to tree founded, base: ${base}, size: ${size}",
-                ("base", chain_ptr->base_block)
-                ("size", chain_ptr->blocks.size())
-            );
-        }
-
-        auto conf_msg = chain_conf_msg(make_confirmation(*chain_ptr), _private_key);
-        chain_ptr->signature = conf_msg.signature;
-
-        auto max_conf_node = _prefix_tree_ptr->insert(chain_ptr, _private_key.get_public_key());
-        try_finalize(max_conf_node);
-
-        send_confirmations(chain_ptr);
+        //TODO insert block to tree
+        //TODO round
     }
 
     void on(const on_irreversible_event& event) {
@@ -525,38 +451,15 @@ private:
     }
 
     void update_lib(const block_id_type& lib_id) {
-        auto node_ptr = _prefix_tree_ptr->find(lib_id);
+        auto node_ptr = _prefix_tree->find(lib_id);
         auto pub_key = _private_key.get_public_key();
 
         if (node_ptr) {
-            _prefix_tree_ptr->set_root(node_ptr);
+            _prefix_tree->set_root(node_ptr);
         }
         else {
-            auto new_irb = std::make_shared<prefix_node>(prefix_node { lib_id });
-            _prefix_tree_ptr->set_root(new_irb);
-        }
-
-        if (!_prefix_tree_ptr->get_root()->has_confirmation(pub_key)) {
-            auto chain = std::make_shared<chain_type>(chain_type{ lib_id });
-
-            auto conf_msg = chain_conf_msg(make_confirmation(*chain), _private_key);
-            chain->signature = conf_msg.signature;
-
-            _prefix_tree_ptr->get_root()->confirmation_data[pub_key] = chain;
-
-            send_confirmations(chain);
-        }
-    }
-
-    void send_confirmations(const chain_type_ptr& chain) {
-        for (auto& peer: _peers) {
-            auto ext_chain = extend_chain(chain, peer.second.last_known_block_id);
-
-            if (ext_chain) {
-                auto conf = chain_conf_msg(make_confirmation(*ext_chain), _private_key);
-                send(peer.first, conf);
-                peer.second.last_known_block_id = get_last_block_id(*ext_chain);
-            }
+            auto new_irb = std::make_shared<tree_node>(tree_node { lib_id });
+            _prefix_tree->set_root(new_irb);
         }
     }
 
@@ -568,85 +471,8 @@ private:
             return chain.base_block;
     }
 
-    chain_type_ptr get_chain_to_tree(const block_id_type& to) {
-        auto chain = std::make_shared<chain_type>();
-        auto cur_bid = to;
-
-        while (!_prefix_tree_ptr->find(cur_bid)) {
-            auto prev_block_id = get_prev_block_id(cur_bid);
-
-            if (!prev_block_id) {
-                elog("Grandpa block bot found in fork db, id: ${id}", ("id", cur_bid));
-                elog("Grandpa cannot link block with local tree, id: ${id}", ("id", to));
-                elog("Grandpa lib, id: ${id}, num: ${num}",
-                    ("id", _prefix_tree_ptr->get_root()->block_id)
-                    ("num", num(_prefix_tree_ptr->get_root()->block_id))
-                );
-                return nullptr;
-            }
-
-            chain->blocks.push_back(cur_bid);
-            cur_bid = *prev_block_id;
-        }
-
-        std::reverse(chain->blocks.begin(), chain->blocks.end());
-        chain->base_block = cur_bid;
-
-        return chain;
-    }
-
-    chain_type_ptr extend_chain(const chain_type_ptr& chain, const block_id_type& from) {
-         auto node_ptr = _prefix_tree_ptr->find(chain->base_block);
-
-        if (!node_ptr) {
-            elog("Grandpa cannot find base block in local tree, id: ${id}", ("id", chain->base_block));
-            elog("Grandpa lib, id: ${id}, num: ${num}",
-                ("id", _prefix_tree_ptr->get_root()->block_id)
-                ("num", num(_prefix_tree_ptr->get_root()->block_id))
-            );
-            return nullptr;
-        }
-
-        vector<block_id_type> blocks;
-
-        while (node_ptr && num(node_ptr->block_id) >= num(from)) {
-            blocks.push_back(node_ptr->block_id);
-            node_ptr = node_ptr->parent;
-        }
-
-        if (blocks.size() && blocks.back() != from) {
-            dlog("Granpda cannot link chain with target block, id: ${id}", ("id", from));
-        }
-
-        auto ext_chain = std::make_shared<chain_type>(*chain);
-
-        if (blocks.size()) {
-            ext_chain->base_block = blocks.back();
-            blocks.pop_back();
-            std::reverse(blocks.begin(), blocks.end());
-            ext_chain->blocks.insert(ext_chain->blocks.end(), blocks.begin(), blocks.end());
-        }
-
-        return ext_chain;
-    }
-
-    confirmation_type make_confirmation(const chain_type& chain) {
-        return confirmation_type { chain.base_block, chain.blocks };
-    }
-
-    uint32_t num(const block_id_type& id) {
+    uint32_t num(const block_id_type& id) const {
         return fc::endian_reverse_u32(id._hash[0]);
-    }
-
-    // TODO thread safe
-    bool is_producer(const public_key_type& pub_key) {
-        // const auto & ctlr = app().get_plugin<chain_plugin>().chain();
-        // const auto & prods = ctlr.active_producers().producers;
-        // auto prod_itr = std::find_if(prods.begin(), prods.end(), [&](const auto& prod) {
-        //     return prod.block_signing_key == pub_key;
-        // });
-        // return prod_itr != prods.end();
-        return true;
     }
 
     // TODO thread safe
@@ -656,7 +482,7 @@ private:
         return 2;
     }
 
-    void try_finalize(const prefix_node_ptr& node_ptr) {
+    void try_finalize(const tree_node_ptr& node_ptr) {
         auto id = node_ptr->block_id;
 
         ilog("Grandpa max conf block, id: ${id}, num: ${num}, confs: ${confs}",
@@ -665,7 +491,7 @@ private:
             ("confs", node_ptr->confirmation_data.size())
         );
 
-        if (num(id) <= num(_prefix_tree_ptr->get_root()->block_id)) {
+        if (num(id) <= num(_prefix_tree->get_root()->block_id)) {
             return;
         }
 
