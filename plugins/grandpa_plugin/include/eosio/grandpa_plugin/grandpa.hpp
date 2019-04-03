@@ -1,6 +1,6 @@
 #pragma once
 #include "network_messages.hpp"
-#include "prefix_chain_tree.hpp"
+#include "round.hpp"
 #include <fc/exception/exception.hpp>
 #include <fc/io/json.hpp>
 #include <fc/bitutil.hpp>
@@ -19,11 +19,6 @@ using std::pair;
 
 using mutex_guard = std::lock_guard<std::mutex>;
 
-using tree_node = prefix_node<prevote_msg>;
-using prefix_tree = prefix_chain_tree<tree_node>;
-
-using tree_node_ptr =std::shared_ptr<tree_node>;
-using prefix_tree_ptr =std::shared_ptr<prefix_tree>;
 
 template <typename message_type>
 class message_queue {
@@ -191,6 +186,10 @@ using prods_provider_ptr = std::shared_ptr<prods_provider>;
 
 class grandpa {
 public:
+    static constexpr uint32_t round_width = 2;
+    static constexpr uint32_t prevote_width = 1;
+
+public:
     grandpa() {}
 
     grandpa& set_in_net_channel(const net_channel_ptr& ptr) {
@@ -267,6 +266,7 @@ private:
     std::atomic<bool> _done { false };
     private_key_type _private_key;
     prefix_tree_ptr _prefix_tree;
+    grandpa_round_ptr _round;
     std::map<uint32_t, peer_info> _peers;
 
 #ifndef SYNC_GRANDPA
@@ -368,7 +368,12 @@ private:
         const auto& data = msg.data;
 
         switch (data.which()) {
-            //TODO process prevote and precommit
+            case grandpa_net_msg_data::tag<prevote_msg>::value:
+                _round->on(data.get<prevote_msg>());
+                break;
+            case grandpa_net_msg_data::tag<precommit_msg>::value:
+                _round->on(data.get<precommit_msg>());
+                break;
             case grandpa_net_msg_data::tag<handshake_msg>::value:
                 on(ses_id, data.get<handshake_msg>());
                 break;
@@ -430,7 +435,15 @@ private:
         );
 
         //TODO insert block to tree
-        //TODO round
+
+        if (should_start_round(event.block_id)) {
+            finish_round();
+            new_round(round_num(event.block_id), /* TODO pass primary */ _private_key.get_public_key());
+        }
+
+        if (should_end_prevote(event.block_id)) {
+            _round->end_prevote();
+        }
     }
 
     void on(const on_irreversible_event& event) {
@@ -447,6 +460,48 @@ private:
         auto msg = handshake_msg(handshake_type{get_lib()}, _private_key);
         dlog("Sending handshake msg");
         send(event.ses_id, msg);
+    }
+
+    uint32_t round_num(const block_id_type& block_id) const {
+        return (num(block_id) - 1) / round_width;
+    }
+
+    uint32_t num_in_round(const block_id_type& block_id) const {
+        return (num(block_id) - 1) % round_width;
+    }
+
+    bool should_start_round(const block_id_type& block_id) const {
+        if (!_round) {
+            return true;
+        }
+
+        return round_num(block_id) > _round->get_num();
+    }
+
+    bool should_end_prevote(const block_id_type& block_id) const {
+        if (!_round) {
+            return false;
+        }
+
+        return round_num(block_id) == _round->get_num()
+            && num_in_round(block_id) == prevote_width;
+    }
+
+    void finish_round() {
+        if (!_round) {
+            return;
+        }
+
+        dlog("Grandpa finishing round, num: ${n}", ("n", _round->get_num()));
+        _round->finish();
+
+        //TODO get proof and finalize
+        //TODO remove proofs from tree
+    }
+
+    void new_round(uint32_t round_num, const public_key_type& primary) {
+        dlog("Grandpa staring round, num: ${n}", ("n", round_num));
+        _round.reset(new grandpa_round(round_num, primary, _prefix_tree));
     }
 
     void update_lib(const block_id_type& lib_id) {
