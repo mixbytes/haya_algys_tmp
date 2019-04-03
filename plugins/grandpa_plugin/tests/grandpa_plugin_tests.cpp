@@ -81,33 +81,35 @@ BOOST_AUTO_TEST_CASE(prefix_chain_test_longest) try {
 
 } FC_LOG_AND_RETHROW()
 
-//BOOST_AUTO_TEST_CASE(prefix_chain_internal) try {
-//    auto pub_key_1 = get_pub_key();
-//    auto pub_key_2 = get_pub_key();
-//
-//    auto lib_block_id = fc::sha256("beef");
-//    auto node = tree_node{lib_block_id};
-//
-//    prefix_tree tree(std::make_shared<tree_node>(node));
-//    auto chain = chain_type{lib_block_id, blocks_type{fc::sha256("abc"), fc::sha256("def")}};
-//    tree.insert(chain, pub_key_1, 0);
-//
-//    const tree_node::ptr root = tree.get_root();
-//    BOOST_REQUIRE_EQUAL(lib_block_id, root->block_id);
-//    BOOST_REQUIRE_EQUAL(1, root->adjacent_nodes.size());
-//
-//    const auto chain_first_node = root->adjacent_nodes[0];
-//    BOOST_TEST(tree.find(fc::sha256("abc")) == chain_first_node);
-//    BOOST_TEST(chain_first_node->adjacent_nodes[0] == tree.get_final_chain_head(1));
-//
-//    // add second chain
-//    chain = chain_type{fc::sha256("abc"), blocks_type{fc::sha256("bbc")}};
-//    tree.insert(chain, pub_key_2, 0);
-//
-//    BOOST_REQUIRE_EQUAL(2, chain_first_node->adjacent_nodes.size());
-//    BOOST_TEST(chain_first_node == tree.get_final_chain_head(2));
-//
-//} FC_LOG_AND_RETHROW()
+BOOST_AUTO_TEST_CASE(prefix_chain_internal) try {
+    auto pub_key_1 = get_pub_key();
+    auto pub_key_2 = get_pub_key();
+
+    auto lib_block_id = fc::sha256("beef");
+    auto node = tree_node{lib_block_id};
+
+    prefix_tree tree(std::make_shared<tree_node>(node));
+    auto chain = chain_type{lib_block_id, blocks_type{fc::sha256("abc"), fc::sha256("def")}};
+    tree.insert(chain, pub_key_1, {});
+    tree.add_confirmations(chain, pub_key_1, 0);
+
+    const auto root = tree.get_root();
+    BOOST_REQUIRE_EQUAL(lib_block_id, root->block_id);
+    BOOST_REQUIRE_EQUAL(1, root->adjacent_nodes.size());
+
+    const auto chain_first_node = root->adjacent_nodes[0];
+    BOOST_TEST(tree.find(fc::sha256("abc")) == chain_first_node);
+    BOOST_TEST(chain_first_node->adjacent_nodes[0] == tree.get_final_chain_head(1));
+
+    // add second chain
+    chain = chain_type{fc::sha256("abc"), blocks_type{fc::sha256("bbc")}};
+    tree.insert(chain, pub_key_2, {});
+    tree.add_confirmations(chain, pub_key_2, 0);
+
+    BOOST_REQUIRE_EQUAL(2, chain_first_node->adjacent_nodes.size());
+    BOOST_TEST(chain_first_node == tree.get_final_chain_head(2));
+
+} FC_LOG_AND_RETHROW()
 
 BOOST_AUTO_TEST_SUITE_END()
 
