@@ -4,13 +4,13 @@
 #include <memory>
 #include <vector>
 #include <map>
-
+#include <set>
 
 using std::vector;
 using std::shared_ptr;
 using std::pair;
 using std::make_pair;
-
+using std::set;
 
 template <typename ConfType>
 class prefix_node {
@@ -24,6 +24,8 @@ public:
     std::map<public_key_type, shared_ptr<conf_type>> confirmation_data;
     vector<node_ptr> adjacent_nodes;
     node_ptr parent;
+    public_key_type creator_key;
+    set<public_key_type> active_bp_keys;
 
     size_t confirmation_number() const {
         return confirmation_data.size();
@@ -70,30 +72,27 @@ public:
         return find_node(block_id, root);
     }
 
-    node_ptr insert(const chain_type& chain, const public_key_type& pub_key, const conf_ptr& conf) {
-        auto node = find(chain.base_block);
+    node_ptr add_confirmations(const chain_type& chain, const public_key_type& sender_key, const conf_ptr& conf) {
+        node_ptr node = nullptr;
         vector<block_id_type> blocks;
-
+        std::tie(node, blocks) = get_tree_node(chain);
         if (!node) {
-            auto block_itr = std::find_if(chain.blocks.begin(), chain.blocks.end(), [&](const auto& block) {
-                return (bool) find(block);
-            });
+            dlog("Cannot find base block");
+            return nullptr;
+        }
+        return _add_confirmations(node, blocks, sender_key, conf);
+    }
 
-            if (block_itr != chain.blocks.end()) {
-                dlog("Found node: ${id}", ("id", *block_itr));
-                blocks.insert(blocks.end(), block_itr + 1, chain.blocks.end());
-                node = find(*block_itr);
-            }
-        }
-        else {
-            blocks = chain.blocks;
-        }
+    void insert(const chain_type& chain, const public_key_type& creator_key, const set<public_key_type>& active_bp_keys) {
+        node_ptr node = nullptr;
+        vector<block_id_type> blocks;
+        std::tie(node, blocks) = get_tree_node(chain);
 
         if (!node) {
             throw NodeNotFoundError();
         }
 
-        return insert_blocks(node, blocks, pub_key, conf);
+        insert_blocks(node, blocks, creator_key, active_bp_keys);
     }
 
     auto get_final_chain_head(size_t confirmation_number) const {
@@ -114,6 +113,25 @@ public:
 
 private:
     node_ptr root;
+
+    pair<node_ptr, vector<block_id_type> > get_tree_node(const chain_type& chain) {
+        auto node = find(chain.base_block);
+        const auto& blocks = chain.blocks;
+
+        if (node) {
+            return {node, std::move(chain.blocks)};
+        }
+
+        auto block_itr = std::find_if(blocks.begin(), blocks.end(), [&](const auto& block) {
+            return (bool) find(block);
+        });
+
+        if (block_itr != blocks.end()) {
+            dlog("Found node: ${id}", ("id", *block_itr));
+            return { find(*block_itr), vector<block_id_type>(block_itr + 1, blocks.end()) };
+        }
+        return {nullptr, {} };
+    }
 
     node_info get_chain_head(const node_ptr& node, size_t confirmation_number, size_t depth) const {
         auto result = node_info{node, depth};
@@ -142,27 +160,45 @@ private:
         return nullptr;
     }
 
-    node_ptr insert_blocks(node_ptr node, const vector<block_id_type>& blocks, const public_key_type& pub_key, const conf_ptr& conf) {
-        auto max_conf_node = node;
-        node->confirmation_data[pub_key] = conf;
-        dlog("Confirmations, id: ${id}, count: ${count}", ("id", node->block_id)("count", node->confirmation_data.size()));
+    void insert_blocks(node_ptr node, const vector<block_id_type>& blocks, const public_key_type& creator_key,
+            const set<public_key_type>& active_bp_keys) {
+        dlog("Base block confirmations, id: ${id}, count: ${count}", ("id", node->block_id)("count", node->confirmation_data.size()));
 
         for (const auto& block_id : blocks) {
+            dlog("Block, id: ${id}", ("id", block_id));
             auto next_node = node->get_matching_node(block_id);
             if (next_node) {
-                dlog("Confirmations, id: ${id}, count: ${count}", ("id", next_node->block_id)("count", next_node->confirmation_data.size()));
-                next_node->confirmation_data[pub_key] = conf;
-                if (max_conf_node->confirmation_data.size() <= next_node->confirmation_data.size()) {
-                    max_conf_node = next_node;
-                }
+                dlog("Confirmations, count: ${count}", ("count", next_node->confirmation_data.size()));
             } else {
                 next_node = std::make_shared<NodeType>(NodeType{block_id,
-                                                                      {{pub_key, conf}},
                                                                       {},
-                                                                      node});
+                                                                      {},
+                                                                      node,
+                                                                      creator_key,
+                                                                      active_bp_keys});
                 node->adjacent_nodes.push_back(next_node);
             }
             node = next_node;
+        }
+    }
+
+    node_ptr _add_confirmations(node_ptr node, const vector<block_id_type>& blocks, const public_key_type& sender_key,
+                           const conf_ptr& conf) {
+        auto max_conf_node = node;
+        node->confirmation_data[sender_key] = conf;
+        dlog("Base block confirmations, id: ${id}, count: ${count}", ("id", node->block_id)("count", node->confirmation_data.size()));
+
+        for (const auto& block_id : blocks) {
+            dlog("Block, id: ${id}", ("id", block_id));
+            node = node->get_matching_node(block_id);
+            if (!node) {
+                break;
+            }
+            dlog("Confirmations, count: ${count}", ("count", node->confirmation_data.size()));
+            node->confirmation_data[sender_key] = conf;
+            if (max_conf_node->confirmation_data.size() <= node->confirmation_data.size()) {
+                max_conf_node = node;
+            }
         }
 
         return max_conf_node;
