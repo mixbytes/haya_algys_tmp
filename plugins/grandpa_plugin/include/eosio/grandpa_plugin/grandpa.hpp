@@ -434,11 +434,21 @@ private:
             ("num", num(event.block_id))
         );
 
-        //TODO insert block to tree
+        try {
+            _prefix_tree->insert({event.prev_block_id, {event.block_id}},
+                                event.creator_key, event.active_bp_keys);
+        }
+        catch (const NodeNotFoundError& e) {
+            elog("Grandpa cannot insert block into tree, base_block: ${base_id}, block: ${id}",
+                ("base_id", event.prev_block_id)
+                ("id", event.prev_block_id)
+            );
+            return;
+        }
 
         if (should_start_round(event.block_id)) {
             finish_round();
-            new_round(round_num(event.block_id), /* TODO pass primary */ _private_key.get_public_key());
+            new_round(round_num(event.block_id), event.creator_key);
         }
 
         if (should_end_prevote(event.block_id)) {
