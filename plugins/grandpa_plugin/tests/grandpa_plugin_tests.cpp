@@ -173,7 +173,7 @@ BOOST_AUTO_TEST_CASE(precommit_validate_success) try {
     auto msg = precommit_msg(precommit, priv_key);
 
     BOOST_TEST(precommit.round_num == msg.data.round_num);
-    BOOST_TEST(precommit.prevote_hash == msg.data.prevote_hash);
+    BOOST_TEST(precommit.block_id == msg.data.block_id);
     BOOST_TEST(true == msg.validate(pub_key));
 
 } FC_LOG_AND_RETHROW()
@@ -193,7 +193,7 @@ BOOST_AUTO_TEST_CASE(precommit_validate_fail) try {
     auto pub_key_2 = priv_key_2.get_public_key();
 
     BOOST_TEST(precommit.round_num == msg.data.round_num);
-    BOOST_TEST(precommit.prevote_hash == msg.data.prevote_hash);
+    BOOST_TEST(precommit.block_id == msg.data.block_id);
     BOOST_TEST(false == msg.validate(pub_key_2));
 
 } FC_LOG_AND_RETHROW()

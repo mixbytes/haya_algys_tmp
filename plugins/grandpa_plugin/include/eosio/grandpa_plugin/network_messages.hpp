@@ -53,7 +53,7 @@ struct prevote_type {
 
 struct precommit_type {
     uint32_t round_num;
-    digest_type prevote_hash;
+    block_id_type block_id;
 };
 
 using handshake_msg = network_msg<handshake_type>;
@@ -67,7 +67,7 @@ using precommit_msg = network_msg<precommit_type>;
 
 
 FC_REFLECT(prevote_type, (round_num)(base_block)(blocks))
-FC_REFLECT(precommit_type, (round_num)(prevote_hash))
+FC_REFLECT(precommit_type, (round_num)(block_id))
 
 FC_REFLECT(block_get_conf_type, (block_id))
 FC_REFLECT(handshake_type, (lib))
