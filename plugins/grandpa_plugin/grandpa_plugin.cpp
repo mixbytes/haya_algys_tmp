@@ -54,7 +54,17 @@ public:
 
         _on_accepted_block_handle = app().get_channel<channels::accepted_block>()
         .subscribe( [ev_ch]( block_state_ptr s ) {
-            ev_ch->send(grandpa_event { on_accepted_block_event { s->id } });
+            std::set<public_key_type> producer_keys;
+            for (const auto& elem :  s->active_schedule.producers) {
+                producer_keys.insert(elem.block_signing_key);
+            }
+
+            ev_ch->send(grandpa_event { on_accepted_block_event {
+                    s->id,
+                    s->header.previous,
+                    s->block_signing_key,
+                    std::move(producer_keys),
+            } });
         });
 
         _on_irb_handle = app().get_channel<channels::irreversible_block>()
