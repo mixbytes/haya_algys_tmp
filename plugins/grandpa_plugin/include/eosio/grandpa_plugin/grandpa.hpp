@@ -233,7 +233,7 @@ public:
         return *this;
     }
 
-    void start() {
+    void start(prefix_tree_ptr tree) {
         FC_ASSERT(_in_net_channel && _in_event_channel, "in channels should be inited");
         FC_ASSERT(_out_net_channel, "out channels should be inited");
         FC_ASSERT(_finality_channel, "finality channel should be inited");
@@ -241,11 +241,7 @@ public:
         FC_ASSERT(_lib_provider, "LIB provider should be inited");
         FC_ASSERT(_prods_provider, "producer provider should be inited");
 
-        auto lib_id = get_lib();
-        _prefix_tree.reset(
-            new prefix_tree(std::make_shared<tree_node>(tree_node { lib_id }))
-        );
-        update_lib(lib_id);
+        _prefix_tree = tree;
 
 #ifndef SYNC_GRANDPA
         _thread_ptr.reset(new std::thread([this]() {
