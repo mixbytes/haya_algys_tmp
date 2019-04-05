@@ -35,6 +35,14 @@ public:
         return net_message_types_base + grandpa_net_msg_data::tag<T>::value;
     }
 
+    static auto get_bp_keys(block_state_ptr s) {
+        std::set<public_key_type> producer_keys;
+        for (const auto& elem :  s->active_schedule.producers) {
+            producer_keys.insert(elem.block_signing_key);
+        }
+        return producer_keys;
+    }
+
     void start() {
         auto in_net_ch = std::make_shared<net_channel>();
         auto out_net_ch = std::make_shared<net_channel>();
@@ -54,16 +62,12 @@ public:
 
         _on_accepted_block_handle = app().get_channel<channels::accepted_block>()
         .subscribe( [ev_ch]( block_state_ptr s ) {
-            std::set<public_key_type> producer_keys;
-            for (const auto& elem :  s->active_schedule.producers) {
-                producer_keys.insert(elem.block_signing_key);
-            }
 
             ev_ch->send(grandpa_event { on_accepted_block_event {
                     s->id,
                     s->header.previous,
                     s->block_signing_key,
-                    std::move(producer_keys),
+                    get_bp_keys(s)
             } });
         });
 
@@ -133,7 +137,35 @@ public:
             .set_lib_provider(lib_pr)
             .set_prods_provider(prods_pr);
 
-        _grandpa.start();
+        _grandpa.start(copy_fork_db());
+    }
+
+    prefix_tree_ptr copy_fork_db() {
+        const auto& ctrl = app().get_plugin<chain_plugin>().chain();
+        auto lib_id = ctrl.last_irreversible_block_id();
+        dlog("Initializing prefix_chain_tree with ${lib_id}", ("lib_id", lib_id));
+        prefix_tree_ptr tree(new prefix_tree(std::make_shared<tree_node>(tree_node { lib_id })));
+        dlog("Copying master chain from fork_db");
+
+        auto current_block = ctrl.head_block_state();
+
+        vector<block_state_ptr> blocks;
+        while (current_block && current_block->id != lib_id) {
+            blocks.push_back(current_block);
+            current_block = ctrl.fetch_block_state_by_id(current_block->prev());
+        }
+        std::reverse(blocks.begin(), blocks.end());
+
+        auto base_block = lib_id;
+        for (const auto& block_ptr : blocks) {
+            auto block_id = block_ptr->id;
+            tree->insert(chain_type{base_block, {block_ptr->id}},
+                         block_ptr->block_signing_key,
+                         get_bp_keys(block_ptr));
+            base_block = block_id;
+        }
+        dlog("Successfully copied ${amount} blocks", ("amount", blocks.size()));
+        return tree;
     }
 
     void stop() {
