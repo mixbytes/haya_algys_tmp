@@ -141,6 +141,9 @@ struct grandpa_net_msg {
 
 struct on_accepted_block_event {
     block_id_type block_id;
+    block_id_type prev_block_id;
+    public_key_type creator_key;
+    std::set<public_key_type> active_bp_keys;
 };
 
 struct on_irreversible_event {
