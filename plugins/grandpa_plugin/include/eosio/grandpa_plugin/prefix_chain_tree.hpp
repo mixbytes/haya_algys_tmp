@@ -12,6 +12,7 @@ using std::weak_ptr;
 using std::pair;
 using std::make_pair;
 using std::set;
+using std::map;
 
 template <typename ConfType>
 class prefix_node {
@@ -58,6 +59,7 @@ template <typename NodeType>
 class prefix_chain_tree {
 private:
     using node_ptr = shared_ptr<NodeType>;
+    using node_weak_ptr = weak_ptr<NodeType>;
     using conf_ptr = shared_ptr<typename NodeType::conf_type>;
 
     struct node_info {
@@ -111,8 +113,18 @@ public:
         root->parent.reset();
     }
 
+    node_ptr get_last_inserted_block(const public_key_type& pub_key) {
+        auto iterator = last_inserted_block.find(pub_key);
+        if (iterator != last_inserted_block.end()) {
+            auto node = iterator->second;
+            return node.lock();
+        }
+        return nullptr;
+    }
+
 private:
     node_ptr root;
+    map<public_key_type, node_weak_ptr> last_inserted_block;
 
     pair<node_ptr, vector<block_id_type> > get_tree_node(const chain_type& chain) {
         auto node = find(chain.base_block);
@@ -176,6 +188,7 @@ private:
             }
             node = next_node;
         }
+        last_inserted_block[creator_key] = node;
     }
 
     node_ptr _add_confirmations(node_ptr node, const vector<block_id_type>& blocks, const public_key_type& sender_key,

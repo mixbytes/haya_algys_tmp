@@ -197,3 +197,25 @@ BOOST_AUTO_TEST_CASE(precommit_validate_fail) try {
 } FC_LOG_AND_RETHROW()
 
 BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(last_inserted_block_test)
+
+BOOST_AUTO_TEST_CASE(get_last_inserted_block) try {
+    auto lib_block_id = fc::sha256("beef");
+    auto root = std::make_shared<tree_node>(tree_node{lib_block_id});
+    auto chain1 = chain_type{lib_block_id, {fc::sha256("a")}};
+    auto chain2 = chain_type{fc::sha256("a"), {fc::sha256("b")}};
+    auto pub_key1 = get_pub_key();
+    auto pub_key2 = get_pub_key();
+    auto unknown_pub_key = get_pub_key();
+    prefix_tree tree(std::move(root));
+    tree.insert(chain1, pub_key1, {});
+    tree.insert(chain2, pub_key2, {});
+    BOOST_TEST(tree.get_last_inserted_block(pub_key1)->block_id == fc::sha256("a"));
+    BOOST_TEST(tree.get_last_inserted_block(pub_key2)->block_id == fc::sha256("b"));
+    BOOST_TEST(not tree.get_last_inserted_block(unknown_pub_key));
+    tree.set_root(tree.find(fc::sha256("b")));
+    BOOST_TEST(not tree.get_last_inserted_block(pub_key1));
+} FC_LOG_AND_RETHROW()
+
+BOOST_AUTO_TEST_SUITE_END()
