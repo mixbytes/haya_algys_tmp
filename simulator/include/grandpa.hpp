@@ -9,14 +9,15 @@
 
 class GrandpaNode: public Node {
 public:
-    explicit GrandpaNode(int id, Network && net, fork_db && db):
-        Node(id, std::move(net), std::move(db))
+    explicit GrandpaNode(int id, Network && net, fork_db && db_, public_key_type pub_key):
+        Node(id, std::move(net), std::move(db_), std::move(pub_key))
     {
         init_channels();
         init_providers();
         init_grandpa();
 
-        grandpa.start();
+        prefix_tree_ptr tree(new prefix_tree(std::make_shared<tree_node>(tree_node { db.last_irreversible_block_id() })));
+        grandpa.start(tree);
     }
 
     ~GrandpaNode() {
@@ -37,7 +38,9 @@ public:
 
     void on_accepted_block_event(block_id_type id) override {
         cout << "[Node] #" << this->id << " on_accepted_block_event " << endl;
-        ev_ch->send(grandpa_event { ::on_accepted_block_event { id } });
+        ev_ch->send(grandpa_event { ::on_accepted_block_event { id, db.fetch_prev_block_id(id),
+                                                                creator_key, get_active_bp_keys()
+                                                                } });
     }
 
 private:
