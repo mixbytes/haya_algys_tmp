@@ -66,7 +66,7 @@ private:
     };
 
 public:
-    explicit prefix_chain_tree(node_ptr root_): root(std::move(root_)) {}
+    explicit prefix_chain_tree(node_ptr&& root_): root(std::move(root_)) {}
     prefix_chain_tree() = delete;
     prefix_chain_tree(const prefix_chain_tree&) = delete;
 
