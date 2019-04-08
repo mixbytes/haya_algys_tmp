@@ -87,6 +87,10 @@ public:
         return _add_confirmations(node, blocks, sender_key, conf);
     }
 
+    void remove_confirmations() {
+        _remove_confirmations(root);
+    }
+
     void insert(const chain_type& chain, const public_key_type& creator_key, const set<public_key_type>& active_bp_keys) {
         node_ptr node = nullptr;
         vector<block_id_type> blocks;
@@ -211,5 +215,15 @@ private:
         }
 
         return max_conf_node;
+    }
+
+    void _remove_confirmations(node_ptr root) {
+        if (!root) {
+            return;
+        }
+        root->confirmation_data.clear();
+        for (const auto& node : root->adjacent_nodes) {
+            _remove_confirmations(node);
+        }
     }
 };
