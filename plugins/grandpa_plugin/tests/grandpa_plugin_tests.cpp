@@ -221,3 +221,24 @@ BOOST_AUTO_TEST_CASE(get_last_inserted_block) try {
 } FC_LOG_AND_RETHROW()
 
 BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(remove_confirmations)
+
+BOOST_AUTO_TEST_CASE(remove_confirmations_test) try {
+    auto lib_block_id = fc::sha256("beef");
+    auto root = std::make_shared<tree_node>(tree_node{lib_block_id});
+    auto chain = chain_type{lib_block_id,
+                            vector<block_id_type>{fc::sha256("a")}};
+    prefix_tree tree(std::move(root));
+    tree.insert(chain, get_pub_key(), {});
+    tree.add_confirmations(chain, get_pub_key(), 0);
+    auto head = tree.get_final_chain_head(1);
+    BOOST_TEST(head);
+    BOOST_TEST(head->block_id == fc::sha256("a"));
+
+    tree.remove_confirmations();
+    head = tree.get_final_chain_head(1);
+    BOOST_TEST(!head);
+} FC_LOG_AND_RETHROW()
+
+BOOST_AUTO_TEST_SUITE_END()
