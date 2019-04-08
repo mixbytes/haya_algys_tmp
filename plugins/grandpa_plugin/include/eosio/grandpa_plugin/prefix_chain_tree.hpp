@@ -8,6 +8,7 @@
 
 using std::vector;
 using std::shared_ptr;
+using std::weak_ptr;
 using std::pair;
 using std::make_pair;
 using std::set;
@@ -17,13 +18,14 @@ class prefix_node {
 public:
     using conf_type = ConfType;
 private:
-    using node_ptr = shared_ptr<prefix_node<conf_type>>;
+    using node_type = prefix_node<conf_type>;
+    using node_ptr = shared_ptr<node_type>;
 
 public:
     block_id_type block_id;
     std::map<public_key_type, shared_ptr<conf_type>> confirmation_data;
     vector<node_ptr> adjacent_nodes;
-    node_ptr parent;
+    weak_ptr<node_type> parent;
     public_key_type creator_key;
     set<public_key_type> active_bp_keys;
 
@@ -106,9 +108,7 @@ public:
 
     auto set_root(const node_ptr& new_root) {
         root = new_root;
-        if (new_root->parent) {
-            new_root->parent.reset();
-        }
+        root->parent.reset();
     }
 
 private:
