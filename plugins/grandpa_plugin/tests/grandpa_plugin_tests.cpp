@@ -27,8 +27,7 @@ using blocks_type = vector<block_id_type>;
 BOOST_AUTO_TEST_CASE(prefix_chain_one_node) try {
     auto lib_block_id = fc::sha256("beef");
     auto root = std::make_shared<tree_node>(tree_node{lib_block_id});
-    prefix_tree tree(root);
-    BOOST_TEST(root, tree.get_root());
+    prefix_tree tree(std::move(root));
     BOOST_REQUIRE_EQUAL(nullptr, tree.get_final_chain_head(1));
 } FC_LOG_AND_RETHROW()
 
@@ -37,7 +36,7 @@ BOOST_AUTO_TEST_CASE(prefix_chain_two_nodes) try {
     auto root = std::make_shared<tree_node>(tree_node{lib_block_id});
     auto chain = chain_type{lib_block_id,
                             vector<block_id_type>{fc::sha256("a")}};
-    prefix_tree tree(root);
+    prefix_tree tree(std::move(root));
     tree.insert(chain, get_pub_key(), {});
     tree.add_confirmations(chain, get_pub_key(), 0);
     auto head = tree.get_final_chain_head(1);
@@ -57,7 +56,7 @@ BOOST_AUTO_TEST_CASE(prefix_chain_test_longest) try {
     auto pub_key_2 = get_pub_key();
     auto lib_block_id = fc::sha256("beef");
     auto root = std::make_shared<tree_node>(tree_node{lib_block_id});
-    prefix_tree tree(root);
+    prefix_tree tree(std::move(root));
     std::map<char, block_id_type> blocks;
     for (char c = 'a'; c <= 'd'; c++) {
         blocks[c] = fc::sha256(std::string{c});
