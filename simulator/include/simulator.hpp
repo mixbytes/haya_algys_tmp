@@ -11,11 +11,13 @@
 #include <numeric>
 #include <chrono>
 #include <fc/bitutil.hpp>
+#include <fc/crypto/sha256.hpp>
 #include <boost/optional.hpp>
 
 #include <database.hpp>
 
 using namespace std;
+using namespace fc::crypto;
 
 static ostream& operator<<(ostream& os, const block_id_type& block) {
     os << block.str().substr(16, 4);
@@ -33,6 +35,10 @@ static ostream& operator<<(ostream& os, const fork_db_chain_type& chain) {
 
 static uint32_t get_block_height(const block_id_type& id) {
     return fc::endian_reverse_u32(id._hash[0]);
+}
+
+static inline auto get_pub_key() {
+    return private_key::generate().get_public_key();
 }
 
 class Clock {
@@ -106,8 +112,13 @@ private:
 class Node {
 public:
     Node() = default;
-    explicit Node(int id, Network && net, fork_db&& db): id(id), net(std::move(net)), db(std::move(db)) {}
+    explicit Node(int id, Network && net, fork_db&& db, public_key_type pub_key):
+        id(id), net(std::move(net)), db(std::move(db)), creator_key(std::move(pub_key)) {}
     virtual ~Node() = default;
+
+    TestRunner* get_runner() const {
+        return net.get_runner();
+    }
 
     template <typename T>
     void send(uint32_t to, const T& msg) {
@@ -146,6 +157,7 @@ public:
     }
 
     inline Clock get_clock() const;
+    inline set<public_key_type> get_active_bp_keys() const;
 
     virtual void on_receive(uint32_t from, void *) {
         std::cout << "Received from " << from << std::endl;
@@ -164,6 +176,7 @@ public:
 
     Network net;
     fork_db db;
+    public_key_type creator_key;
 
     queue<fork_db_chain_type> pending_chains;
 
@@ -447,6 +460,10 @@ public:
         return BLOCK_GEN_MS * blocks_per_slot;
     }
 
+    set<public_key_type> get_active_bp_keys() const {
+        return active_bp_keys;
+    }
+
     const block_id_type genesys_block;
     const uint32_t RUNNER_ID = 10000000;
 
@@ -470,8 +487,11 @@ private:
         for (auto i = 0; i < count; ++i) {
             // See https://bit.ly/2Wp3Nsf
             auto conf_number = 2 * blocks_per_slot * bft_threshold();
-            auto node = std::make_shared<TNode>(i, Network(i, this), fork_db(genesys_block, conf_number));
+            auto pub_key = get_pub_key();
+            auto node = std::make_shared<TNode>(i, Network(i, this), fork_db(genesys_block,
+                    conf_number), pub_key);
             nodes.push_back(std::static_pointer_cast<Node>(node));
+            active_bp_keys.insert(pub_key);
         }
     }
 
@@ -523,6 +543,7 @@ private:
     matrix_type delay_matrix;
     matrix_type dist_matrix;
     priority_queue<Task> timeline;
+    set<public_key_type> active_bp_keys;
     uint32_t schedule_time = DELAY_MS;
     Clock clock;
 };
@@ -549,5 +570,9 @@ void Network::bcast(const T& msg) {
 }
 
 inline Clock Node::get_clock() const {
-    return net.get_runner()->get_clock();
+    return get_runner()->get_clock();
+}
+
+inline set<public_key_type> Node::get_active_bp_keys() const {
+    return get_runner()->get_active_bp_keys();
 }
