@@ -126,6 +126,19 @@ public:
         return nullptr;
     }
 
+    chain_type get_branch(const block_id_type& head_block_id) const {
+        auto last_node = find(head_block_id);
+
+        chain_type chain { root->block_id, { head_block_id } };
+        while (last_node->parent.lock() != root) {
+            chain.blocks.push_back(last_node->parent.lock()->block_id);
+            last_node = last_node->parent.lock();
+        }
+        std::reverse(chain.blocks.begin(), chain.blocks.end());
+
+        return chain;
+    }
+
 private:
     node_ptr root;
     map<public_key_type, node_weak_ptr> last_inserted_block;

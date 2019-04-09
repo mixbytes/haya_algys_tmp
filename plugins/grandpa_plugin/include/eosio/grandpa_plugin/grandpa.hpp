@@ -127,7 +127,6 @@ protected:
     cb_type cb;
 };
 
-using grandpa_net_msg_data = static_variant<handshake_msg, handshake_ans_msg, prevote_msg, precommit_msg>;
 
 struct grandpa_net_msg {
     uint32_t ses_id;
@@ -160,8 +159,6 @@ using grandpa_message_ptr = shared_ptr<grandpa_message>;
 
 struct peer_info {
     public_key_type public_key;
-    block_id_type lib_id;
-    block_id_type last_known_block_id;
 };
 
 
@@ -186,8 +183,8 @@ using prods_provider_ptr = std::shared_ptr<prods_provider>;
 
 class grandpa {
 public:
-    static constexpr uint32_t round_width = 2;
-    static constexpr uint32_t prevote_width = 1;
+    static constexpr uint32_t round_width = 4;
+    static constexpr uint32_t prevote_width = 2;
 
 public:
     grandpa() {}
@@ -267,7 +264,9 @@ private:
     private_key_type _private_key;
     prefix_tree_ptr _prefix_tree;
     grandpa_round_ptr _round;
+    block_id_type _lib;
     std::map<uint32_t, peer_info> _peers;
+    std::map<uint32_t, std::set<digest_type>> known_messages;
 
 #ifndef SYNC_GRANDPA
     message_queue<grandpa_message> _message_queue;
@@ -313,9 +312,12 @@ private:
 
     template <typename T>
     void bcast(const T & msg) {
-        dlog("Grandpa net message bcasted, type: ${type}", ("type", grandpa_net_msg_data::tag<T>::value));
+   //     dlog("Grandpa net message bcasted, type: ${type}", ("type", grandpa_net_msg_data::tag<T>::value));
         for (const auto& peer: _peers) {
-            _out_net_channel->send(grandpa_net_msg { peer.first, msg });
+            if (!known_messages[peer.first].count(msg.hash())) {
+                _out_net_channel->send(grandpa_net_msg { peer.first, msg });
+                known_messages[peer.first].insert(msg.hash());
+            }
         }
     }
 
@@ -369,10 +371,10 @@ private:
 
         switch (data.which()) {
             case grandpa_net_msg_data::tag<prevote_msg>::value:
-                _round->on(data.get<prevote_msg>());
+                process_round_msg(ses_id, data.get<prevote_msg>());
                 break;
             case grandpa_net_msg_data::tag<precommit_msg>::value:
-                _round->on(data.get<precommit_msg>());
+                process_round_msg(ses_id, data.get<precommit_msg>());
                 break;
             case grandpa_net_msg_data::tag<handshake_msg>::value:
                 on(ses_id, data.get<handshake_msg>());
@@ -411,7 +413,7 @@ private:
     void on(uint32_t ses_id, const handshake_msg& msg) {
         wlog("Grandpa handshake_msg received, msg: ${msg}", ("msg", msg));
         try {
-            _peers[ses_id] = peer_info {msg.public_key(), msg.data.lib, msg.data.lib};
+            _peers[ses_id] = peer_info {msg.public_key()};
 
             send(ses_id, handshake_ans_msg(handshake_ans_type { get_lib() }, _private_key));
         } catch (const fc::exception& e) {
@@ -422,7 +424,7 @@ private:
     void on(uint32_t ses_id, const handshake_ans_msg& msg) {
         wlog("Grandpa handshake_ans_msg received, msg: ${msg}", ("msg", msg));
         try {
-            _peers[ses_id] = peer_info {msg.public_key(), msg.data.lib, msg.data.lib};
+            _peers[ses_id] = peer_info {msg.public_key()};
         } catch (const fc::exception& e) {
             elog("Grandpa handshake_ans_msg handler error, e: ${e}", ("e", e.what()));
         }
@@ -441,7 +443,7 @@ private:
         catch (const NodeNotFoundError& e) {
             elog("Grandpa cannot insert block into tree, base_block: ${base_id}, block: ${id}",
                 ("base_id", event.prev_block_id)
-                ("id", event.prev_block_id)
+                ("id", event.block_id)
             );
             return;
         }
@@ -470,6 +472,13 @@ private:
         auto msg = handshake_msg(handshake_type{get_lib()}, _private_key);
         dlog("Sending handshake msg");
         send(event.ses_id, msg);
+    }
+
+    template <typename T>
+    void process_round_msg(uint32_t ses_id, const T& msg) {
+        known_messages[ses_id].insert(msg.hash());
+        _round->on(msg);
+        bcast(msg);
     }
 
     uint32_t round_num(const block_id_type& block_id) const {
@@ -505,18 +514,36 @@ private:
         dlog("Grandpa finishing round, num: ${n}", ("n", _round->get_num()));
         _round->finish();
 
-        //TODO get proof and finalize
+        if (_round->get_state() == grandpa_round::state::done) {
+            auto proof = _round->get_proof();
+            ilog("Grandpa round reached supermajority, round num: ${n}, best block id: ${b}, best block num: ${bn}",
+                ("n", proof.round_num)
+                ("b", proof.best_block)
+                ("bn", num(proof.best_block))
+            );
+
+            if (num(_lib) < num(proof.best_block)) {
+                _finality_channel->send(proof.best_block);
+            }
+        }
+
+        known_messages.clear();
         //TODO remove proofs from tree
     }
 
     void new_round(uint32_t round_num, const public_key_type& primary) {
         dlog("Grandpa staring round, num: ${n}", ("n", round_num));
-        _round.reset(new grandpa_round(round_num, primary, _prefix_tree));
+        _round.reset(new grandpa_round(round_num, primary, _prefix_tree, _private_key,
+        [this](const prevote_msg& msg) {
+            bcast(msg);
+        },
+        [this](const precommit_msg& msg) {
+            bcast(msg);
+        }));
     }
 
     void update_lib(const block_id_type& lib_id) {
         auto node_ptr = _prefix_tree->find(lib_id);
-        auto pub_key = _private_key.get_public_key();
 
         if (node_ptr) {
             _prefix_tree->set_root(node_ptr);
@@ -525,47 +552,43 @@ private:
             auto new_irb = std::make_shared<tree_node>(tree_node { lib_id });
             _prefix_tree->set_root(new_irb);
         }
-    }
 
-    template <typename T>
-    block_id_type get_last_block_id(const T& chain) {
-        if (chain.blocks.size())
-            return chain.blocks.back();
-        else
-            return chain.base_block;
+        _lib = lib_id;
+
+        dlog("TREE ROOT: ${b}", ("b", _prefix_tree->get_root()->block_id));
     }
 
     uint32_t num(const block_id_type& id) const {
         return fc::endian_reverse_u32(id._hash[0]);
     }
 
-    // TODO thread safe
-    uint32_t bft_threshold() {
-        // const auto & ctlr = app().get_plugin<chain_plugin>().chain();
-        // return ctlr.active_producers().producers.size() * 2 / 3 ;
-        return 2;
-    }
+    // // TODO thread safe
+    // uint32_t bft_threshold() {
+    //     // const auto & ctlr = app().get_plugin<chain_plugin>().chain();
+    //     // return ctlr.active_producers().producers.size() * 2 / 3 ;
+    //     return 2;
+    // }
 
-    void try_finalize(const tree_node_ptr& node_ptr) {
-        auto id = node_ptr->block_id;
+    // void try_finalize(const tree_node_ptr& node_ptr) {
+    //     auto id = node_ptr->block_id;
 
-        ilog("Grandpa max conf block, id: ${id}, num: ${num}, confs: ${confs}",
-            ("id", id)
-            ("num", num(id))
-            ("confs", node_ptr->confirmation_data.size())
-        );
+    //     ilog("Grandpa max conf block, id: ${id}, num: ${num}, confs: ${confs}",
+    //         ("id", id)
+    //         ("num", num(id))
+    //         ("confs", node_ptr->confirmation_data.size())
+    //     );
 
-        if (num(id) <= num(_prefix_tree->get_root()->block_id)) {
-            return;
-        }
+    //     if (num(id) <= num(_prefix_tree->get_root()->block_id)) {
+    //         return;
+    //     }
 
-        if (node_ptr->confirmation_data.size() >= bft_threshold()) {
-            _finality_channel->send(id);
-            wlog("Grandpa finalized block, id: ${id}, num: ${num}",
-                ("id", id)
-                ("num", num(id))
-            );
-            update_lib(id);
-        }
-    }
+    //     if (node_ptr->confirmation_data.size() >= bft_threshold()) {
+    //         _finality_channel->send(id);
+    //         wlog("Grandpa finalized block, id: ${id}, num: ${num}",
+    //             ("id", id)
+    //             ("num", num(id))
+    //         );
+    //         update_lib(id);
+    //     }
+    // }
 };
