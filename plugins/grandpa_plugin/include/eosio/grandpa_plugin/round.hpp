@@ -24,15 +24,29 @@ public:
 
     struct proof {
         uint32_t round_num;
+        block_id_type best_block;
         std::vector<prevote_msg> prevotes;
         std::vector<precommit_msg> precommites;
     };
 
+private:
+    using prevote_bcaster_type = std::function<void(const prevote_msg&)>;
+    using precommit_bcaster_type = std::function<void(const precommit_msg&)>;
+
 public:
-    grandpa_round(uint32_t num, const public_key_type& primary, prefix_tree_ptr tree):
+    grandpa_round(uint32_t num,
+        const public_key_type& primary,
+        const prefix_tree_ptr& tree,
+        const private_key_type& private_key,
+        prevote_bcaster_type && prevote_bcaster,
+        precommit_bcaster_type && precommit_bcaster
+    ) :
         num(num),
         primary(primary),
-        tree(tree)
+        tree(tree),
+        private_key(private_key),
+        prevote_bcaster(std::move(prevote_bcaster)),
+        precommit_bcaster(std::move(precommit_bcaster))
     {
         dlog("Grandpa round started, num: ${n}, primary: ${p}",
             ("n", num)
@@ -59,7 +73,7 @@ public:
     void on(const prevote_msg& msg) {
         dlog("Received prevote: msg: ${m}", ("m", msg));
 
-        if (state >= state::precommit) {
+        if (state != state::prevote && state != state::ready_to_precommit) {
             dlog("Prevote while wrong state, round: ${r}", ("r", num));
             return;
         }
@@ -69,29 +83,13 @@ public:
             return;
         }
 
-        auto max_prevote_node = tree->add_confirmations({ msg.data.base_block, msg.data.blocks },
-                                msg.public_key(), std::make_shared<prevote_msg>(msg));
-
-        FC_ASSERT(max_prevote_node, "confirmation should be insertable after validate");
-
-        prevoted_keys.insert(msg.public_key());
-        dlog("Prevote inserted, round: ${r}, from: ${f}", ("r", num)("f", msg.public_key()));
-
-        if (has_threshold_prevotes(max_prevote_node)) {
-            state = state::ready_to_precommit;
-            best_node = max_prevote_node;
-            dlog("Prevote threshold reached, round: ${r}, best block: ${b}",
-                ("r", num)
-                ("b", best_node->block_id)
-            );
-            return;
-        }
+        add_prevote(msg);
     }
 
     void on(const precommit_msg& msg) {
         dlog("Received precommit, msg: ${m}", ("m", msg));
 
-        if (state != state::precommit) {
+        if (state != state::precommit && state != state::ready_to_precommit) {
             dlog("Precommit while wrong state, round: ${r}", ("r", num));
             return;
         }
@@ -101,16 +99,7 @@ public:
             return;
         }
 
-        precommited_keys.insert(msg.public_key());
-        proof.precommites.push_back(msg);
-
-        if (proof.precommites.size() > 2 * best_node->active_bp_keys.size() / 3) {
-            dlog("Precommit threshold reached, round: ${r}, best block: ${b}",
-                ("r", num)
-                ("b", best_node->block_id)
-            );
-            state = state::done;
-        }
+        add_precommit(msg);
     }
 
     void end_prevote() {
@@ -122,6 +111,9 @@ public:
             state = state::fail;
             return;
         }
+
+        proof.round_num = num;
+        proof.best_block = best_node->block_id;
 
         std::transform(best_node->confirmation_data.begin(), best_node->confirmation_data.end(),
             std::back_inserter(proof.prevotes), [](const auto& item) -> prevote_msg { return *item.second; });
@@ -146,7 +138,21 @@ private:
         dlog("Round sending prevote, num: ${n}", ("n", num));
         state = state::prevote;
 
-        //TODO find best chain and bcast prevote
+        auto last_node = tree->get_last_inserted_block(primary);
+
+        if (!last_node) {
+            wlog("Not found last node in tree for primary, primary: ${p}", ("p", primary));
+            return;
+        }
+
+        auto chain = tree->get_branch(last_node->block_id);
+        auto prevote = prevote_type { num, chain.base_block, std::move(chain.blocks) };
+
+        auto msg = prevote_msg(prevote, private_key);
+
+        add_prevote(msg);
+
+        prevote_bcaster(msg);
     }
 
     void precommit() {
@@ -154,7 +160,12 @@ private:
         dlog("Round sending precommit, num: ${n}", ("n", num));
         state = state::precommit;
 
-        //TODO do precommit for founded prevote
+        auto precommit = precommit_type { num, best_node->block_id };
+        auto msg = precommit_msg(precommit, private_key);
+
+        add_precommit(msg);
+
+        precommit_bcaster(msg);
     }
 
     bool validate_prevote(const prevote_msg& msg) {
@@ -184,6 +195,10 @@ private:
             );
             return false;
         }
+
+        auto branch = tree->get_branch(node->block_id);
+
+
 
         return true;
     }
@@ -218,6 +233,43 @@ private:
         return true;
     }
 
+    void add_prevote(const prevote_msg& msg) {
+        if (state == state::ready_to_precommit) {
+            return;
+        }
+
+        auto max_prevote_node = tree->add_confirmations({ msg.data.base_block, msg.data.blocks },
+                                msg.public_key(), std::make_shared<prevote_msg>(msg));
+
+        FC_ASSERT(max_prevote_node, "confirmation should be insertable");
+
+        prevoted_keys.insert(msg.public_key());
+        dlog("Prevote inserted, round: ${r}, from: ${f}", ("r", num)("f", msg.public_key()));
+
+        if (has_threshold_prevotes(max_prevote_node)) {
+            state = state::ready_to_precommit;
+            best_node = max_prevote_node;
+            dlog("Prevote threshold reached, round: ${r}, best block: ${b}",
+                ("r", num)
+                ("b", best_node->block_id)
+            );
+            return;
+        }
+    }
+
+    void add_precommit(const precommit_msg& msg) {
+        precommited_keys.insert(msg.public_key());
+        proof.precommites.push_back(msg);
+
+        if (proof.precommites.size() > 2 * best_node->active_bp_keys.size() / 3) {
+            dlog("Precommit threshold reached, round: ${r}, best block: ${b}",
+                ("r", num)
+                ("b", best_node->block_id)
+            );
+            state = state::done;
+        }
+    }
+
     tree_node_ptr find_last_node(const vector<block_id_type>& blocks) {
         auto block_itr = std::find_if(blocks.rend(), blocks.rbegin(),
         [&](const auto& block_id) {
@@ -241,6 +293,9 @@ private:
     state state { state::init };
     proof proof;
     tree_node_ptr best_node;
+    private_key_type private_key;
+    prevote_bcaster_type prevote_bcaster;
+    precommit_bcaster_type precommit_bcaster;
 
     std::set<public_key_type> prevoted_keys;
     std::set<public_key_type> precommited_keys;
