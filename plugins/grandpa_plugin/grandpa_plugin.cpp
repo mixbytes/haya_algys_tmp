@@ -104,8 +104,12 @@ public:
             }
         });
 
-        finality_ch->subscribe([this](const block_id_type& msg) {
-            //TODO finalization
+        finality_ch->subscribe([this](const block_id_type& block_id) {
+            app().get_io_service().post([block_id = block_id]() {
+                app().get_plugin<chain_plugin>()
+                    .chain()
+                    .bft_finalize(block_id);
+            });
         });
 
         auto prev_block_pr = std::make_shared<prev_block_prodiver>([](const block_id_type& id) -> optional<block_id_type> {
