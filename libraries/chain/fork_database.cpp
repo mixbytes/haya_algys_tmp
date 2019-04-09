@@ -136,7 +136,7 @@ namespace eosio { namespace chain {
       auto inserted = my->index.insert(n);
       EOS_ASSERT( inserted.second, fork_database_exception, "duplicate block added?" );
 
-      my->head = *my->index.get<by_lib_block_num>().begin();
+      my->head = *(--my->index.get<by_block_num>().end());
 
       auto lib    = my->head->dpos_irreversible_blocknum;
       auto oldest = *my->index.get<by_block_num>().begin();
@@ -273,6 +273,7 @@ namespace eosio { namespace chain {
          auto itr_to_remove = nitr;
          ++nitr;
          auto id = (*itr_to_remove)->id;
+         dlog("REMOVING BLOCK: num: ${num}, id: ${id}", ("num", (*itr_to_remove)->block_num)("id", id));
          remove( id );
       }
    }
@@ -311,14 +312,16 @@ namespace eosio { namespace chain {
    // need to check confirmations before call this method
    void fork_database::bft_finalize( const block_id_type& block_id ) {
       auto b = get_block( block_id );
-      EOS_ASSERT( b, fork_db_block_not_found, "unable to find block id ${id}", ("id",block_id));
+      if (!b) {
+         return;
+      }
 
       set_bft_irreversible( block_id );
 
-      auto oldest = *my->index.get<by_block_num>().begin();
+      auto prev = get_block( b->header.previous );
 
-      if (oldest->block_num < b->block_num) {
-         prune ( b );
+      if (prev) {
+         prune ( prev );
       }
    }
 
