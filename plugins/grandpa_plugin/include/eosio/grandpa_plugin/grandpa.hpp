@@ -157,11 +157,6 @@ using grandpa_message = static_variant<grandpa_net_msg, grandpa_event>;
 using grandpa_message_ptr = shared_ptr<grandpa_message>;
 
 
-struct peer_info {
-    public_key_type public_key;
-};
-
-
 using net_channel = channel<const grandpa_net_msg&>;
 using net_channel_ptr = std::shared_ptr<net_channel>;
 
@@ -183,8 +178,8 @@ using prods_provider_ptr = std::shared_ptr<prods_provider>;
 
 class grandpa {
 public:
-    static constexpr uint32_t round_width = 4;
-    static constexpr uint32_t prevote_width = 2;
+    static constexpr uint32_t round_width = 2;
+    static constexpr uint32_t prevote_width = 1;
 
 public:
     grandpa() {}
@@ -265,8 +260,8 @@ private:
     prefix_tree_ptr _prefix_tree;
     grandpa_round_ptr _round;
     block_id_type _lib;
-    std::map<uint32_t, peer_info> _peers;
-    std::map<uint32_t, std::set<digest_type>> known_messages;
+    std::map<public_key_type, uint32_t> _peers;
+    std::map<public_key_type, std::set<digest_type>> known_messages;
 
 #ifndef SYNC_GRANDPA
     message_queue<grandpa_message> _message_queue;
@@ -312,11 +307,11 @@ private:
 
     template <typename T>
     void bcast(const T & msg) {
-   //     dlog("Grandpa net message bcasted, type: ${type}", ("type", grandpa_net_msg_data::tag<T>::value));
+        auto msg_hash = digest_type::hash(msg);
         for (const auto& peer: _peers) {
-            if (!known_messages[peer.first].count(msg.hash())) {
-                _out_net_channel->send(grandpa_net_msg { peer.first, msg });
-                known_messages[peer.first].insert(msg.hash());
+            if (!known_messages[peer.first].count(msg_hash)) {
+                send(peer.second, msg);
+                known_messages[peer.first].insert(msg_hash);
             }
         }
     }
@@ -413,7 +408,7 @@ private:
     void on(uint32_t ses_id, const handshake_msg& msg) {
         wlog("Grandpa handshake_msg received, msg: ${msg}", ("msg", msg));
         try {
-            _peers[ses_id] = peer_info {msg.public_key()};
+            _peers[msg.public_key()] = ses_id;
 
             send(ses_id, handshake_ans_msg(handshake_ans_type { get_lib() }, _private_key));
         } catch (const fc::exception& e) {
@@ -424,16 +419,18 @@ private:
     void on(uint32_t ses_id, const handshake_ans_msg& msg) {
         wlog("Grandpa handshake_ans_msg received, msg: ${msg}", ("msg", msg));
         try {
-            _peers[ses_id] = peer_info {msg.public_key()};
+            _peers[msg.public_key()] = ses_id;
         } catch (const fc::exception& e) {
             elog("Grandpa handshake_ans_msg handler error, e: ${e}", ("e", e.what()));
         }
     }
 
     void on(const on_accepted_block_event& event) {
-        dlog("Grandpa on_accepted_block_event event handled, block_id: ${id}, num: ${num}",
+        dlog("Grandpa on_accepted_block_event event handled, block_id: ${id}, num: ${num}, creator: ${c}, bp_keys: ${bpk}",
             ("id", event.block_id)
             ("num", num(event.block_id))
+            ("c", event.creator_key)
+            ("bpk", event.active_bp_keys)
         );
 
         try {
@@ -449,7 +446,7 @@ private:
         }
 
         if (should_start_round(event.block_id)) {
-            finish_round();
+            clear_round_data();
             new_round(round_num(event.block_id), event.creator_key);
         }
 
@@ -476,9 +473,20 @@ private:
 
     template <typename T>
     void process_round_msg(uint32_t ses_id, const T& msg) {
-        known_messages[ses_id].insert(msg.hash());
-        _round->on(msg);
+        if (!_round) {
+            dlog("Grandpa round does not exists");
+            return;
+        }
+
+        auto self_pub_key = _private_key.get_public_key();
+        auto msg_hash = digest_type::hash(msg);
+
         bcast(msg);
+
+        if (!known_messages[self_pub_key].count(msg_hash)) {
+            _round->on(msg);
+            known_messages[self_pub_key].insert(msg_hash);
+        }
     }
 
     uint32_t round_num(const block_id_type& block_id) const {
@@ -490,6 +498,10 @@ private:
     }
 
     bool should_start_round(const block_id_type& block_id) const {
+        if (num(block_id) < 1) {
+            return false;
+        }
+
         if (!_round) {
             return true;
         }
@@ -526,9 +538,6 @@ private:
                 _finality_channel->send(proof.best_block);
             }
         }
-
-        known_messages.clear();
-        //TODO remove proofs from tree
     }
 
     void new_round(uint32_t round_num, const public_key_type& primary) {
@@ -539,7 +548,15 @@ private:
         },
         [this](const precommit_msg& msg) {
             bcast(msg);
+        },
+        [this]() {
+            finish_round();
         }));
+    }
+
+    void clear_round_data() {
+        known_messages.clear();
+        _prefix_tree->remove_confirmations();
     }
 
     void update_lib(const block_id_type& lib_id) {
@@ -554,41 +571,9 @@ private:
         }
 
         _lib = lib_id;
-
-        dlog("TREE ROOT: ${b}", ("b", _prefix_tree->get_root()->block_id));
     }
 
     uint32_t num(const block_id_type& id) const {
         return fc::endian_reverse_u32(id._hash[0]);
     }
-
-    // // TODO thread safe
-    // uint32_t bft_threshold() {
-    //     // const auto & ctlr = app().get_plugin<chain_plugin>().chain();
-    //     // return ctlr.active_producers().producers.size() * 2 / 3 ;
-    //     return 2;
-    // }
-
-    // void try_finalize(const tree_node_ptr& node_ptr) {
-    //     auto id = node_ptr->block_id;
-
-    //     ilog("Grandpa max conf block, id: ${id}, num: ${num}, confs: ${confs}",
-    //         ("id", id)
-    //         ("num", num(id))
-    //         ("confs", node_ptr->confirmation_data.size())
-    //     );
-
-    //     if (num(id) <= num(_prefix_tree->get_root()->block_id)) {
-    //         return;
-    //     }
-
-    //     if (node_ptr->confirmation_data.size() >= bft_threshold()) {
-    //         _finality_channel->send(id);
-    //         wlog("Grandpa finalized block, id: ${id}, num: ${num}",
-    //             ("id", id)
-    //             ("num", num(id))
-    //         );
-    //         update_lib(id);
-    //     }
-    // }
 };

@@ -117,6 +117,13 @@ public:
         root->parent.reset();
     }
 
+    auto get_head() const {
+        if (!head_block.lock()) {
+            return root;
+        }
+        return head_block.lock();
+    }
+
     node_ptr get_last_inserted_block(const public_key_type& pub_key) {
         auto iterator = last_inserted_block.find(pub_key);
         if (iterator != last_inserted_block.end()) {
@@ -142,6 +149,7 @@ public:
 private:
     node_ptr root;
     map<public_key_type, node_weak_ptr> last_inserted_block;
+    node_weak_ptr head_block;
 
     pair<node_ptr, vector<block_id_type> > get_tree_node(const chain_type& chain) {
         auto node = find(chain.base_block);
@@ -206,6 +214,7 @@ private:
             node = next_node;
         }
         last_inserted_block[creator_key] = node;
+        head_block = node;
     }
 
     node_ptr _add_confirmations(node_ptr node, const vector<block_id_type>& blocks, const public_key_type& sender_key,
