@@ -27,7 +27,7 @@ static ostream& operator<<(ostream& os, const block_id_type& block) {
 static ostream& operator<<(ostream& os, const fork_db_chain_type& chain) {
     os << "[ " << chain.base_block;
     for (const auto& block : chain.blocks) {
-        os << " -> " << block;
+        os << " -> " << block.first;
     }
     os << " ]";
     return os;
@@ -37,8 +37,8 @@ static uint32_t get_block_height(const block_id_type& id) {
     return fc::endian_reverse_u32(id._hash[0]);
 }
 
-static inline auto get_pub_key() {
-    return private_key::generate().get_public_key();
+static inline auto get_priv_key() {
+    return private_key::generate();
 }
 
 class Clock {
@@ -112,8 +112,8 @@ private:
 class Node {
 public:
     Node() = default;
-    explicit Node(int id, Network && net, fork_db&& db, public_key_type pub_key):
-        id(id), net(std::move(net)), db(std::move(db)), creator_key(std::move(pub_key)) {}
+    explicit Node(int id, Network && net, fork_db&& db, private_key_type private_key):
+        id(id), net(std::move(net)), db(std::move(db)), private_key(std::move(private_key)) {}
     virtual ~Node() = default;
 
     TestRunner* get_runner() const {
@@ -124,7 +124,7 @@ public:
     void send(uint32_t to, const T& msg) {
         net.send(to, msg);
     }
-    
+
     bool apply_chain(const fork_db_chain_type& chain) {
         stringstream ss;
         ss << "[Node] #" << id << " ";
@@ -132,12 +132,12 @@ public:
         cout << node_id << "Received " << chain.blocks.size() << " blocks " << endl;
         cout << node_id << chain << endl;
 
-        if (db.find(chain.blocks.back())) {
+        if (db.find(chain.blocks.back().first)) {
             cout << node_id << "Already got chain head. Skipping chain " << endl;
             return false;
         }
 
-        if (get_block_height(chain.blocks.back()) <= get_block_height(db.get_master_block_id())) {
+        if (get_block_height(chain.blocks.back().first) <= get_block_height(db.get_master_block_id())) {
             cout << node_id << "Current master is not smaller than chain head. Skipping chain";
             return false;
         }
@@ -150,8 +150,8 @@ public:
             return false;
         }
 
-        for (auto& block_id : chain.blocks) {
-            on_accepted_block_event(block_id);
+        for (auto& block : chain.blocks) {
+            on_accepted_block_event(block);
         }
         return true;
     }
@@ -167,7 +167,7 @@ public:
         std::cout << "On new peer event handled by " << id << " at " << get_clock().now() << endl;
     }
 
-    virtual void on_accepted_block_event(block_id_type id) {
+    virtual void on_accepted_block_event(pair<block_id_type, public_key_type> block) {
         std::cout << "On accepted block event handled by " << this->id << " at " << get_clock().now() << endl;
     }
 
@@ -176,7 +176,7 @@ public:
 
     Network net;
     fork_db db;
-    public_key_type creator_key;
+    private_key_type private_key;
 
     queue<fork_db_chain_type> pending_chains;
 
@@ -262,7 +262,7 @@ public:
         cout << node_id << "Building on top of " << head->block_id << endl;
         auto new_block_id = generate_block(head_block_height + 1);
         cout << node_id << "New block: " << new_block_id << endl;
-        return {head->block_id, {new_block_id}};
+        return {head->block_id, {{new_block_id, node->private_key.get_public_key()}}};
     }
 
     vector<int> get_ordering() {
@@ -305,9 +305,9 @@ public:
             task.to = producer_id;
             task.cb = [this](NodePtr node) {
                 auto block = create_block(node);
+                relay_block(node, block);
                 node->db.insert(block);
                 node->on_accepted_block_event(block.blocks[0]);
-                relay_block(node, block);
             };
             task.type = Task::CREATE_BLOCK;
             add_task(std::move(task));
@@ -487,11 +487,11 @@ private:
         for (auto i = 0; i < count; ++i) {
             // See https://bit.ly/2Wp3Nsf
             auto conf_number = 2 * blocks_per_slot * bft_threshold();
-            auto pub_key = get_pub_key();
+            auto priv_key = get_priv_key();
             auto node = std::make_shared<TNode>(i, Network(i, this), fork_db(genesys_block,
-                    conf_number), pub_key);
+                    conf_number), priv_key);
             nodes.push_back(std::static_pointer_cast<Node>(node));
-            active_bp_keys.insert(pub_key);
+            active_bp_keys.insert(priv_key.get_public_key());
         }
     }
 
