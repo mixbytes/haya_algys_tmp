@@ -64,10 +64,10 @@ private:
     void init_providers() {
         prev_block_prov = std::make_shared<prev_block_prodiver>([this](const block_id_type& id) -> fc::optional<block_id_type> {
             auto block = db.find(id);
-            if (!block || !block->parent)
+            if (!block || !block->parent.expired())
                 return {};
             else
-                return block->parent->block_id;
+                return block->parent.lock()->block_id;
         });
 
         lib_prov = std::make_shared<lib_prodiver>([this]() -> block_id_type {
