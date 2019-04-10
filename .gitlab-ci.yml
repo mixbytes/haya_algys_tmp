@@ -27,7 +27,9 @@ publish-nomral:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
   only:
-    - master
+    refs:
+      - master
+      - develop
   services:
     - docker:dind
   except:
@@ -48,7 +50,9 @@ publish-dev:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
   only:
-    - master
+    refs:
+      - master
+      - develop
   services:
     - docker:dind
   except:
@@ -69,6 +73,9 @@ publish-builder:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
   only:
+    refs:
+      - develop
+      - master
     changes:
       - Docker/builder/Dockerfile
   services:
