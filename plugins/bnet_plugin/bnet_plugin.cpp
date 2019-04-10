@@ -1210,7 +1210,6 @@ namespace eosio {
             auto mess = std::make_shared<custom_message>(custom_message {msg_type, msg});
 
             app().get_io_service().post([this, session_id, mess] {
-               dlog("ses by num, num: ${num}, size: ${size}", ("num", session_id)("size", _sessions_by_num.size()));
                if (_sessions_by_num.find(session_id) != _sessions_by_num.end()) {
                   auto ses_wptr = _sessions[_sessions_by_num[session_id]];
                   if (auto ses = ses_wptr.lock()) {
