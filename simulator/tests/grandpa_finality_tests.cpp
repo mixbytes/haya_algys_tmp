@@ -19,7 +19,7 @@ TEST(grandpa_finality, three_nodes) {
     graph_type g;
     g.push_back(v0);
     runner.load_graph(g);
-    runner.add_stop_task(1 * runner.get_slot_ms());
+    runner.add_stop_task(2 * runner.get_slot_ms());
     runner.run<GrandpaNode>();
     EXPECT_EQ(get_block_height(runner.get_db(0).last_irreversible_block_id()), 1);
     EXPECT_EQ(get_block_height(runner.get_db(1).last_irreversible_block_id()), 1);
@@ -32,7 +32,7 @@ TEST(grandpa_finality, three_nodes_large_roundtrip) {
     graph_type g;
     g.push_back(v0);
     runner.load_graph(g);
-    runner.add_stop_task(3 * runner.get_slot_ms());
+    runner.add_stop_task(4 * runner.get_slot_ms());
     runner.add_update_delay_task(1 * runner.get_slot_ms(), 0, 2, 10);
     runner.run<GrandpaNode>();
     EXPECT_GE(get_block_height(runner.get_db(0).last_irreversible_block_id()), 2);
@@ -53,10 +53,10 @@ TEST(grandpa_finality, many_nodes) {
     g[10] = v10;
     g[15] = v15;
     runner.load_graph(g);
-    runner.add_stop_task(16 * runner.get_slot_ms());
+    runner.add_stop_task(18 * runner.get_slot_ms());
     runner.run<GrandpaNode>();
-    EXPECT_EQ(get_block_height(runner.get_db(0).last_irreversible_block_id()), 16);
-    EXPECT_EQ(get_block_height(runner.get_db(5).last_irreversible_block_id()), 16);
-    EXPECT_EQ(get_block_height(runner.get_db(10).last_irreversible_block_id()), 16);
-    EXPECT_EQ(get_block_height(runner.get_db(19).last_irreversible_block_id()), 16);
+    EXPECT_EQ(get_block_height(runner.get_db(0).last_irreversible_block_id()), 17);
+    EXPECT_EQ(get_block_height(runner.get_db(5).last_irreversible_block_id()), 17);
+    EXPECT_EQ(get_block_height(runner.get_db(10).last_irreversible_block_id()), 17);
+    EXPECT_EQ(get_block_height(runner.get_db(19).last_irreversible_block_id()), 17);
 }
