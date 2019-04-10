@@ -19,6 +19,7 @@ struct fork_db_node {
     block_id_type block_id;
     vector<fork_db_node_ptr> adjacent_nodes;
     fork_db_node_ptr parent;
+    public_key_type creator_key;
 
     fork_db_node_ptr get_matching_node(const block_id_type& block_id) {
         auto iterator = find_if(adjacent_nodes.begin(), adjacent_nodes.end(), [&](const auto& node) {
@@ -48,7 +49,7 @@ struct block_info {
 
 struct fork_db_chain_type {
     block_id_type base_block;
-    vector<block_id_type> blocks;
+    vector<pair<block_id_type, public_key_type>> blocks;
 };
 
 using fork_db_chain_type_ptr = shared_ptr<fork_db_chain_type>;
@@ -89,7 +90,7 @@ public:
         insert(node, chain.blocks);
     }
 
-    void insert(fork_db_node_ptr node, const vector<block_id_type>& blocks) {
+    void insert(fork_db_node_ptr node, const vector<pair<block_id_type, public_key_type>>& blocks) {
         try_update_lib(insert_blocks(node, blocks));
     }
 
@@ -181,13 +182,14 @@ private:
         return nullptr;
     }
 
-    fork_db_node_ptr insert_blocks(fork_db_node_ptr node, const vector<block_id_type>& blocks) {
-        for (const auto& block_id : blocks) {
-            auto next_node = node->get_matching_node(block_id);
+    fork_db_node_ptr insert_blocks(fork_db_node_ptr node, const vector<pair<block_id_type, public_key_type>>& blocks) {
+        for (const auto& block : blocks) {
+            auto next_node = node->get_matching_node(block.first);
             if (!next_node) {
-                next_node = std::make_shared<fork_db_node>(fork_db_node{block_id,
+                next_node = std::make_shared<fork_db_node>(fork_db_node{block.first,
                                                                         {},
-                                                                        node});
+                                                                        node,
+                                                                        block.second});
                 node->adjacent_nodes.push_back(next_node);
             }
             node = next_node;
