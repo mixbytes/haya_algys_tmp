@@ -70,16 +70,24 @@ struct Task {
     uint32_t at;
     function<void(NodePtr)> cb;
     enum task_type {
-        GENERAL,
+        // User tasks
         STOP,
         UPDATE_DELAY,
+
+        // Node tasks
         SYNC,
         CREATE_BLOCK,
+
+        // Network tasks
+        RELAY_BLOCK,
+        NETWORK_MSG,
+        // Default type
+        GENERAL,
     };
     task_type type = GENERAL;
 
     bool operator<(const Task& task) const {
-        return at > task.at || (at == task.at && to < task.to);
+        return at > task.at || (at == task.at && type > task.type);
     }
 };
 
@@ -341,6 +349,7 @@ public:
                 task.cb = [chain=chain](NodePtr node) {
                     node->apply_chain(chain);
                 };
+                task.type = Task::RELAY_BLOCK;
                 add_task(std::move(task));
             }
         }
@@ -560,7 +569,8 @@ void Network::send(uint32_t to, const T& msg) {
         get_runner()->get_clock().now() + matrix[node_id][to],
         [node_id = node_id, msg = msg](NodePtr n) {
             n->on_receive(node_id, (void*)&msg);
-        }
+        },
+        Task::NETWORK_MSG
     });
 }
 
