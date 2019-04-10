@@ -9,6 +9,7 @@
 
 using std::vector;
 using std::shared_ptr;
+using std::weak_ptr;
 using std::pair;
 using std::make_pair;
 
@@ -18,7 +19,7 @@ using fork_db_node_ptr = shared_ptr<fork_db_node>;
 struct fork_db_node {
     block_id_type block_id;
     vector<fork_db_node_ptr> adjacent_nodes;
-    fork_db_node_ptr parent;
+    weak_ptr<fork_db_node> parent;
     public_key_type creator_key;
 
     fork_db_node_ptr get_matching_node(const block_id_type& block_id) {
@@ -32,7 +33,6 @@ struct fork_db_node {
 static fork_db_node_ptr deep_copy(fork_db_node_ptr src) {
     fork_db_node_ptr dest(new fork_db_node);
     dest->block_id = src->block_id;
-    dest->parent = nullptr;
     dest->adjacent_nodes.resize(src->adjacent_nodes.size());
     for (auto src_iter = src->adjacent_nodes.begin(), dest_iter = dest->adjacent_nodes.begin();
                 src_iter != src->adjacent_nodes.end(); src_iter++, dest_iter++) {
@@ -100,8 +100,8 @@ public:
 
     block_id_type fetch_prev_block_id(const block_id_type& block_id) const {
         auto node = find(block_id);
-        assert(node && node->parent);
-        return node->parent->block_id;
+        assert(node && !node->parent.expired());
+        return node->parent.lock()->block_id;
     }
 
     block_id_type last_irreversible_block_id() const {
@@ -145,14 +145,13 @@ private:
 
     void set_new_lib(const fork_db_node_ptr& node) {
         root = node;
-        root->parent = nullptr;
     }
 
     vector<fork_db_node_ptr> construct_path(fork_db_node_ptr node) const {
         vector<fork_db_node_ptr> result;
         while (node != root) {
             result.push_back(node);
-            node = node->parent;
+            node = node->parent.lock();
         }
         std::reverse(result.begin(), result.end());
         return result;
