@@ -273,7 +273,6 @@ namespace eosio { namespace chain {
          auto itr_to_remove = nitr;
          ++nitr;
          auto id = (*itr_to_remove)->id;
-         dlog("REMOVING BLOCK: num: ${num}, id: ${id}", ("num", (*itr_to_remove)->block_num)("id", id));
          remove( id );
       }
    }
