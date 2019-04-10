@@ -9,14 +9,16 @@
 
 class GrandpaNode: public Node {
 public:
-    explicit GrandpaNode(int id, Network && net, fork_db && db_, public_key_type pub_key):
-        Node(id, std::move(net), std::move(db_), std::move(pub_key))
+    explicit GrandpaNode(int id, Network && net, fork_db && db_, private_key_type private_key):
+        Node(id, std::move(net), std::move(db_), std::move(private_key))
     {
         init_channels();
         init_providers();
         init_grandpa();
 
-        prefix_tree_ptr tree(new prefix_tree(std::make_shared<tree_node>(tree_node { db.last_irreversible_block_id() })));
+        prefix_tree_ptr tree(new prefix_tree(std::make_shared<tree_node>(tree_node {
+            db.last_irreversible_block_id()
+        })));
         grandpa.start(tree);
     }
 
@@ -36,10 +38,10 @@ public:
         ev_ch->send(grandpa_event { ::on_new_peer_event { id } });
     }
 
-    void on_accepted_block_event(block_id_type id) override {
+    void on_accepted_block_event(pair<block_id_type, public_key_type> block) override {
         cout << "[Node] #" << this->id << " on_accepted_block_event " << endl;
-        ev_ch->send(grandpa_event { ::on_accepted_block_event { id, db.fetch_prev_block_id(id),
-                                                                creator_key, get_active_bp_keys()
+        ev_ch->send(grandpa_event { ::on_accepted_block_event { block.first, db.fetch_prev_block_id(block.first),
+                                                                block.second, get_active_bp_keys()
                                                                 } });
     }
 
@@ -86,7 +88,7 @@ private:
             .set_prev_block_provider(prev_block_prov)
             .set_lib_provider(lib_prov)
             .set_prods_provider(prods_prov)
-            .set_private_key(private_key_type::generate());
+            .set_private_key(private_key);
     }
 
     net_channel_ptr in_net_ch;
