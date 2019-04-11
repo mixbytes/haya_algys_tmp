@@ -9,9 +9,9 @@ using prefix_tree = prefix_chain_tree<tree_node>;
 using tree_node_ptr = std::shared_ptr<tree_node>;
 using prefix_tree_ptr = std::shared_ptr<prefix_tree>;
 
-using grandpa_round_ptr = std::shared_ptr<class grandpa_round>;
+using randpa_round_ptr = std::shared_ptr<class randpa_round>;
 
-class grandpa_round {
+class randpa_round {
 public:
     enum class state {
         init, // init state
@@ -36,7 +36,7 @@ private:
     using done_cb_type = std::function<void()>;
 
 public:
-    grandpa_round(uint32_t num,
+    randpa_round(uint32_t num,
         const public_key_type& primary,
         const prefix_tree_ptr& tree,
         const private_key_type& private_key,
@@ -52,7 +52,7 @@ public:
         precommit_bcaster(std::move(precommit_bcaster)),
         done_cb(std::move(done_cb))
     {
-        dlog("Grandpa round started, num: ${n}, primary: ${p}",
+        dlog("Randpa round started, num: ${n}, primary: ${p}",
             ("n", num)
             ("p", primary)
         );
@@ -174,7 +174,7 @@ private:
 
     bool validate_prevote(const prevote_msg& msg) {
         if (num != msg.data.round_num) {
-            dlog("Grandpa received prevote for wrong round, received for: ${rr}, expected: ${er}",
+            dlog("Randpa received prevote for wrong round, received for: ${rr}, expected: ${er}",
                 ("rr", msg.data.round_num)
                 ("er", num)
             );
@@ -182,19 +182,19 @@ private:
         }
 
         if (prevoted_keys.count(msg.public_key())) {
-            dlog("Grandpa received prevote second time for key");
+            dlog("Randpa received prevote second time for key");
             return false;
         }
 
         auto node = find_last_node(msg.data.base_block, msg.data.blocks);
 
         if (!node) {
-            dlog("Grandpa received prevote for unknown blocks");
+            dlog("Randpa received prevote for unknown blocks");
             return false;
         }
 
         if (!node->active_bp_keys.count(msg.public_key())) {
-            dlog("Grandpa received prevote for block from not active producer, id : ${id}",
+            dlog("Randpa received prevote for block from not active producer, id : ${id}",
                 ("id", node->block_id)
             );
             return false;
@@ -205,7 +205,7 @@ private:
 
     bool validate_precommit(const precommit_msg& msg) {
         if (num != msg.data.round_num) {
-            dlog("Grandpa received precommit for wrong round, received for: ${rr}, expected: ${er}",
+            dlog("Randpa received precommit for wrong round, received for: ${rr}, expected: ${er}",
                 ("rr", msg.data.round_num)
                 ("er", num)
             );
@@ -213,12 +213,12 @@ private:
         }
 
         if (precommited_keys.count(msg.public_key())) {
-            dlog("Grandpa received precommit second time for key");
+            dlog("Randpa received precommit second time for key");
             return false;
         }
 
         if (msg.data.block_id != best_node->block_id) {
-            dlog("Grandpa received precommit for not best block, id: ${id}, best_id: ${best_id}",
+            dlog("Randpa received precommit for not best block, id: ${id}, best_id: ${best_id}",
                 ("id", msg.data.block_id)
                 ("best_id", best_node->block_id)
             );
@@ -226,7 +226,7 @@ private:
         }
 
         if (!best_node->has_confirmation(msg.public_key())) {
-            dlog("Grandpa received precommit from not prevoted peer");
+            dlog("Randpa received precommit from not prevoted peer");
             return false;
         }
 

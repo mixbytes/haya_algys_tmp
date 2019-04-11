@@ -7,26 +7,26 @@
 #include <cstdlib>
 #include <ctime>
 #include <random>
-#include <grandpa.hpp>
+#include <randpa.hpp>
 
 using namespace std;
 
 using std::string;
 
-TEST(grandpa_finality, three_nodes) {
+TEST(randpa_finality, three_nodes) {
     auto runner = TestRunner(3);
     vector<pair<int, int> > v0{{1, 2}, {2, 10}};
     graph_type g;
     g.push_back(v0);
     runner.load_graph(g);
     runner.add_stop_task(2 * runner.get_slot_ms());
-    runner.run<GrandpaNode>();
+    runner.run<RandpaNode>();
     EXPECT_EQ(get_block_height(runner.get_db(0).last_irreversible_block_id()), 1);
     EXPECT_EQ(get_block_height(runner.get_db(1).last_irreversible_block_id()), 1);
     EXPECT_EQ(get_block_height(runner.get_db(2).last_irreversible_block_id()), 1);
 }
 
-TEST(grandpa_finality, three_nodes_large_roundtrip) {
+TEST(randpa_finality, three_nodes_large_roundtrip) {
     auto runner = TestRunner(3);
     vector<pair<int, int> > v0{{1, 2}};
     graph_type g;
@@ -34,13 +34,13 @@ TEST(grandpa_finality, three_nodes_large_roundtrip) {
     runner.load_graph(g);
     runner.add_stop_task(5 * runner.get_slot_ms());
     runner.add_update_delay_task(1 * runner.get_slot_ms(), 0, 2, 10);
-    runner.run<GrandpaNode>();
+    runner.run<RandpaNode>();
     EXPECT_GE(get_block_height(runner.get_db(0).last_irreversible_block_id()), 2);
     EXPECT_GE(get_block_height(runner.get_db(1).last_irreversible_block_id()), 2);
     EXPECT_GE(get_block_height(runner.get_db(2).last_irreversible_block_id()), 2);
 }
 
-TEST(grandpa_finality, many_nodes) {
+TEST(randpa_finality, many_nodes) {
     size_t nodes_amount = 21;
     auto runner = TestRunner(nodes_amount);
     vector<pair<int, int> > v0{{1, 20}, {2, 10}, {3, 10}, {4, 30}, {5, 30}};
@@ -54,7 +54,7 @@ TEST(grandpa_finality, many_nodes) {
     g[15] = v15;
     runner.load_graph(g);
     runner.add_stop_task(18 * runner.get_slot_ms());
-    runner.run<GrandpaNode>();
+    runner.run<RandpaNode>();
     EXPECT_EQ(get_block_height(runner.get_db(0).last_irreversible_block_id()), 17);
     EXPECT_EQ(get_block_height(runner.get_db(5).last_irreversible_block_id()), 17);
     EXPECT_EQ(get_block_height(runner.get_db(10).last_irreversible_block_id()), 17);
