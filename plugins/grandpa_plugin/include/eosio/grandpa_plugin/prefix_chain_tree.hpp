@@ -215,7 +215,10 @@ private:
             node = next_node;
         }
         last_inserted_block[creator_key] = node;
-        head_block = node;
+
+        if (get_block_num(node->block_id) > get_block_num(get_head()->block_id)) {
+            head_block = node;
+        }
     }
 
     node_ptr _add_confirmations(node_ptr node, const vector<block_id_type>& blocks, const public_key_type& sender_key,

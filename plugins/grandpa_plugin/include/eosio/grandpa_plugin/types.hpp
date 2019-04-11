@@ -14,6 +14,7 @@
 #include <fc/crypto/ripemd160.hpp>
 #include <fc/fixed_string.hpp>
 #include <fc/crypto/private_key.hpp>
+#include <fc/bitutil.hpp>
 
 
 using public_key_type = fc::crypto::public_key;
@@ -21,3 +22,7 @@ using private_key_type = fc::crypto::private_key;
 using signature_type = fc::crypto::signature;
 using block_id_type = fc::sha256;
 using digest_type = fc::sha256;
+
+uint32_t get_block_num(const block_id_type& id) {
+    return fc::endian_reverse_u32(id._hash[0]);
+}
