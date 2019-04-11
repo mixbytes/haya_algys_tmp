@@ -3,7 +3,6 @@
 #include "round.hpp"
 #include <fc/exception/exception.hpp>
 #include <fc/io/json.hpp>
-#include <fc/bitutil.hpp>
 #include <queue>
 #include <chrono>
 #include <atomic>
@@ -428,7 +427,7 @@ private:
     void on(const on_accepted_block_event& event) {
         dlog("Grandpa on_accepted_block_event event handled, block_id: ${id}, num: ${num}, creator: ${c}, bp_keys: ${bpk}",
             ("id", event.block_id)
-            ("num", num(event.block_id))
+            ("num", get_block_num(event.block_id))
             ("c", event.creator_key)
             ("bpk", event.active_bp_keys)
         );
@@ -458,7 +457,7 @@ private:
     void on(const on_irreversible_event& event) {
         dlog("Grandpa on_irreversible_event event handled, block_id: ${bid}, num: ${num}",
             ("bid", event.block_id)
-            ("num", num(event.block_id))
+            ("num", get_block_num(event.block_id))
         );
 
         update_lib(event.block_id);
@@ -490,15 +489,15 @@ private:
     }
 
     uint32_t round_num(const block_id_type& block_id) const {
-        return (num(block_id) - 1) / round_width;
+        return (get_block_num(block_id) - 1) / round_width;
     }
 
     uint32_t num_in_round(const block_id_type& block_id) const {
-        return (num(block_id) - 1) % round_width;
+        return (get_block_num(block_id) - 1) % round_width;
     }
 
     bool should_start_round(const block_id_type& block_id) const {
-        if (num(block_id) < 1) {
+        if (get_block_num(block_id) < 1) {
             return false;
         }
 
@@ -531,10 +530,10 @@ private:
             ilog("Grandpa round reached supermajority, round num: ${n}, best block id: ${b}, best block num: ${bn}",
                 ("n", proof.round_num)
                 ("b", proof.best_block)
-                ("bn", num(proof.best_block))
+                ("bn", get_block_num(proof.best_block))
             );
 
-            if (num(_lib) < num(proof.best_block)) {
+            if (get_block_num(_lib) < get_block_num(proof.best_block)) {
                 _finality_channel->send(proof.best_block);
             }
         }
@@ -571,9 +570,5 @@ private:
         }
 
         _lib = lib_id;
-    }
-
-    uint32_t num(const block_id_type& id) const {
-        return fc::endian_reverse_u32(id._hash[0]);
     }
 };
