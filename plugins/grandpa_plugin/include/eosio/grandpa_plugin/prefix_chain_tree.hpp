@@ -136,9 +136,10 @@ public:
     chain_type get_branch(const block_id_type& head_block_id) const {
         auto last_node = find(head_block_id);
 
-        chain_type chain { root->block_id, { head_block_id } };
-        while (last_node->parent.lock() != root) {
-            chain.blocks.push_back(last_node->parent.lock()->block_id);
+        chain_type chain { root->block_id, {} };
+        while (last_node != root) {
+            chain.blocks.push_back(last_node->block_id);
+            FC_ASSERT(!last_node->parent.expired(), "parent should be exists");
             last_node = last_node->parent.lock();
         }
         std::reverse(chain.blocks.begin(), chain.blocks.end());
