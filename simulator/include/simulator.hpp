@@ -291,14 +291,16 @@ public:
 
     void add_stop_task(uint32_t at) {
         Task task{RUNNER_ID, RUNNER_ID, DELAY_MS + at,
-                  [&](NodePtr n) { should_stop = true; }
+                  [&](NodePtr n) { should_stop = true; },
+                  Task::STOP
                  };
         add_task(std::move(task));
     }
 
     void add_update_delay_task(uint32_t at, size_t row, size_t col, int delay) {
         Task task{RUNNER_ID, RUNNER_ID, DELAY_MS + at,
-                  [this, row, col, delay](NodePtr n) {  update_delay(row, col, delay); }
+                  [this, row, col, delay](NodePtr n) {  update_delay(row, col, delay); },
+                  Task::UPDATE_DELAY
         };
         add_task(std::move(task));
     }
