@@ -29,8 +29,8 @@ public:
     void push_message(const T& msg) {
         mutex_guard lock(_message_queue_mutex);
 
-        auto grandpa_msg = std::make_shared<message_type>(msg);
-        _message_queue.push(grandpa_msg);
+        auto randpa_msg = std::make_shared<message_type>(msg);
+        _message_queue.push(randpa_msg);
 
         if (_need_notify) {
             _new_msg_cond.notify_one();
@@ -127,9 +127,9 @@ protected:
 };
 
 
-struct grandpa_net_msg {
+struct randpa_net_msg {
     uint32_t ses_id;
-    grandpa_net_msg_data data;
+    randpa_net_msg_data data;
 };
 
 struct on_accepted_block_event {
@@ -147,19 +147,19 @@ struct on_new_peer_event {
     uint32_t ses_id;
 };
 
-using grandpa_event_data = static_variant<on_accepted_block_event, on_irreversible_event, on_new_peer_event>;
-struct grandpa_event {
-    grandpa_event_data data;
+using randpa_event_data = static_variant<on_accepted_block_event, on_irreversible_event, on_new_peer_event>;
+struct randpa_event {
+    randpa_event_data data;
 };
 
-using grandpa_message = static_variant<grandpa_net_msg, grandpa_event>;
-using grandpa_message_ptr = shared_ptr<grandpa_message>;
+using randpa_message = static_variant<randpa_net_msg, randpa_event>;
+using randpa_message_ptr = shared_ptr<randpa_message>;
 
 
-using net_channel = channel<const grandpa_net_msg&>;
+using net_channel = channel<const randpa_net_msg&>;
 using net_channel_ptr = std::shared_ptr<net_channel>;
 
-using event_channel = channel<const grandpa_event&>;
+using event_channel = channel<const randpa_event&>;
 using event_channel_ptr = std::shared_ptr<event_channel>;
 
 using prev_block_prodiver = provider<fc::optional<block_id_type>, block_id_type>; // return prev block id or null if block absent
@@ -175,50 +175,50 @@ using prods_provider = provider<vector<public_key_type>>; // return current bp p
 using prods_provider_ptr = std::shared_ptr<prods_provider>;
 
 
-class grandpa {
+class randpa {
 public:
     static constexpr uint32_t round_width = 2;
     static constexpr uint32_t prevote_width = 1;
 
 public:
-    grandpa() {}
+    randpa() {}
 
-    grandpa& set_in_net_channel(const net_channel_ptr& ptr) {
+    randpa& set_in_net_channel(const net_channel_ptr& ptr) {
         _in_net_channel = ptr;
         return *this;
     }
 
-    grandpa& set_out_net_channel(const net_channel_ptr& ptr) {
+    randpa& set_out_net_channel(const net_channel_ptr& ptr) {
         _out_net_channel = ptr;
         return *this;
     }
 
-    grandpa& set_event_channel(const event_channel_ptr& ptr) {
+    randpa& set_event_channel(const event_channel_ptr& ptr) {
         _in_event_channel = ptr;
         return *this;
     }
 
-    grandpa& set_finality_channel(const finality_channel_ptr& ptr) {
+    randpa& set_finality_channel(const finality_channel_ptr& ptr) {
         _finality_channel = ptr;
         return *this;
     }
 
-    grandpa& set_prev_block_provider(const prev_block_prodiver_ptr& ptr) {
+    randpa& set_prev_block_provider(const prev_block_prodiver_ptr& ptr) {
         _prev_block_provider = ptr;
         return *this;
     }
 
-    grandpa& set_lib_provider(const lib_prodiver_ptr& ptr) {
+    randpa& set_lib_provider(const lib_prodiver_ptr& ptr) {
         _lib_provider = ptr;
         return *this;
     }
 
-    grandpa& set_prods_provider(const prods_provider_ptr& ptr) {
+    randpa& set_prods_provider(const prods_provider_ptr& ptr) {
         _prods_provider = ptr;
         return *this;
     }
 
-    grandpa& set_private_key(const private_key_type& key) {
+    randpa& set_private_key(const private_key_type& key) {
         _private_key = key;
         return *this;
     }
@@ -233,11 +233,11 @@ public:
 
         _prefix_tree = tree;
 
-#ifndef SYNC_GRANDPA
+#ifndef SYNC_RANDPA
         _thread_ptr.reset(new std::thread([this]() {
-            wlog("Grandpa thread started");
+            wlog("Randpa thread started");
             loop();
-            wlog("Grandpa thread terminated");
+            wlog("Randpa thread terminated");
         }));
 #endif
 
@@ -245,7 +245,7 @@ public:
     }
 
     void stop() {
-#ifndef SYNC_GRANDPA
+#ifndef SYNC_RANDPA
         _done = true;
         _message_queue.terminate();
         _thread_ptr->join();
@@ -257,13 +257,13 @@ private:
     std::atomic<bool> _done { false };
     private_key_type _private_key;
     prefix_tree_ptr _prefix_tree;
-    grandpa_round_ptr _round;
+    randpa_round_ptr _round;
     block_id_type _lib;
     std::map<public_key_type, uint32_t> _peers;
     std::map<public_key_type, std::set<digest_type>> known_messages;
 
-#ifndef SYNC_GRANDPA
-    message_queue<grandpa_message> _message_queue;
+#ifndef SYNC_RANDPA
+    message_queue<randpa_message> _message_queue;
 #endif
 
     net_channel_ptr _in_net_channel;
@@ -275,19 +275,19 @@ private:
     prods_provider_ptr _prods_provider;
 
     void subscribe() {
-        _in_net_channel->subscribe([&](const grandpa_net_msg& msg) {
-            dlog("Grandpa received net message, type: ${type}", ("type", msg.data.which()));
-#ifdef SYNC_GRANDPA
-            process_msg(std::make_shared<grandpa_message>(msg));
+        _in_net_channel->subscribe([&](const randpa_net_msg& msg) {
+            dlog("Randpa received net message, type: ${type}", ("type", msg.data.which()));
+#ifdef SYNC_RANDPA
+            process_msg(std::make_shared<randpa_message>(msg));
 #else
             _message_queue.push_message(msg);
 #endif
         });
 
-        _in_event_channel->subscribe([&](const grandpa_event& event) {
-            dlog("Grandpa received event, type: ${type}", ("type", event.data.which()));
-#ifdef SYNC_GRANDPA
-            process_msg(std::make_shared<grandpa_message>(event));
+        _in_event_channel->subscribe([&](const randpa_event& event) {
+            dlog("Randpa received event, type: ${type}", ("type", event.data.which()));
+#ifdef SYNC_RANDPA
+            process_msg(std::make_shared<randpa_message>(event));
 #else
             _message_queue.push_message(event);
 #endif
@@ -296,8 +296,8 @@ private:
 
     template <typename T>
     void send(uint32_t ses_id, const T & msg) {
-        auto net_msg = grandpa_net_msg { ses_id, msg };
-        dlog("Grandpa net message sended, type: ${type}, ses_id: ${ses_id}",
+        auto net_msg = randpa_net_msg { ses_id, msg };
+        dlog("Randpa net message sended, type: ${type}, ses_id: ${ses_id}",
             ("type", net_msg.data.which())
             ("ses_id", ses_id)
         );
@@ -315,7 +315,7 @@ private:
         }
     }
 
-#ifndef SYNC_GRANDPA
+#ifndef SYNC_RANDPA
     void loop() {
         while (true) {
             auto msg = _message_queue.get_next_msg_wait();
@@ -324,7 +324,7 @@ private:
                 break;
             }
 
-            dlog("Grandpa message processing started, type: ${type}", ("type", msg->which()));
+            dlog("Randpa message processing started, type: ${type}", ("type", msg->which()));
 
             process_msg(msg);
         }
@@ -344,60 +344,60 @@ private:
     }
 
     // need handle all messages
-    void process_msg(grandpa_message_ptr msg_ptr) {
+    void process_msg(randpa_message_ptr msg_ptr) {
         auto msg = *msg_ptr;
         switch (msg.which()) {
-            case grandpa_message::tag<grandpa_net_msg>::value:
-                process_net_msg(msg.get<grandpa_net_msg>());
+            case randpa_message::tag<randpa_net_msg>::value:
+                process_net_msg(msg.get<randpa_net_msg>());
                 break;
-            case grandpa_message::tag<grandpa_event>::value:
-                process_event(msg.get<grandpa_event>());
+            case randpa_message::tag<randpa_event>::value:
+                process_event(msg.get<randpa_event>());
                 break;
             default:
-                elog("Grandpa received unknown message, type: ${type}", ("type", msg.which()));
+                elog("Randpa received unknown message, type: ${type}", ("type", msg.which()));
                 break;
         }
     }
 
-    void process_net_msg(const grandpa_net_msg& msg) {
+    void process_net_msg(const randpa_net_msg& msg) {
         auto ses_id = msg.ses_id;
         const auto& data = msg.data;
 
         switch (data.which()) {
-            case grandpa_net_msg_data::tag<prevote_msg>::value:
+            case randpa_net_msg_data::tag<prevote_msg>::value:
                 process_round_msg(ses_id, data.get<prevote_msg>());
                 break;
-            case grandpa_net_msg_data::tag<precommit_msg>::value:
+            case randpa_net_msg_data::tag<precommit_msg>::value:
                 process_round_msg(ses_id, data.get<precommit_msg>());
                 break;
-            case grandpa_net_msg_data::tag<handshake_msg>::value:
+            case randpa_net_msg_data::tag<handshake_msg>::value:
                 on(ses_id, data.get<handshake_msg>());
                 break;
-            case grandpa_net_msg_data::tag<handshake_ans_msg>::value:
+            case randpa_net_msg_data::tag<handshake_ans_msg>::value:
                 on(ses_id, data.get<handshake_ans_msg>());
                break;
             default:
-                ilog("Grandpa message received, but handler not found, type: ${type}",
+                ilog("Randpa message received, but handler not found, type: ${type}",
                     ("type", data.which())
                 );
                 break;
         }
     }
 
-    void process_event(const grandpa_event& event){
+    void process_event(const randpa_event& event){
         const auto& data = event.data;
         switch (data.which()) {
-            case grandpa_event_data::tag<on_accepted_block_event>::value:
+            case randpa_event_data::tag<on_accepted_block_event>::value:
                 on(data.get<on_accepted_block_event>());
                 break;
-            case grandpa_event_data::tag<on_irreversible_event>::value:
+            case randpa_event_data::tag<on_irreversible_event>::value:
                 on(data.get<on_irreversible_event>());
                 break;
-            case grandpa_event_data::tag<on_new_peer_event>::value:
+            case randpa_event_data::tag<on_new_peer_event>::value:
                 on(data.get<on_new_peer_event>());
                 break;
             default:
-                ilog("Grandpa event received, but handler not found, type: ${type}",
+                ilog("Randpa event received, but handler not found, type: ${type}",
                     ("type", data.which())
                 );
                 break;
@@ -405,27 +405,27 @@ private:
     }
 
     void on(uint32_t ses_id, const handshake_msg& msg) {
-        wlog("Grandpa handshake_msg received, msg: ${msg}", ("msg", msg));
+        wlog("Randpa handshake_msg received, msg: ${msg}", ("msg", msg));
         try {
             _peers[msg.public_key()] = ses_id;
 
             send(ses_id, handshake_ans_msg(handshake_ans_type { get_lib() }, _private_key));
         } catch (const fc::exception& e) {
-            elog("Grandpa handshake_msg handler error, e: ${e}", ("e", e.what()));
+            elog("Randpa handshake_msg handler error, e: ${e}", ("e", e.what()));
         }
     }
 
     void on(uint32_t ses_id, const handshake_ans_msg& msg) {
-        wlog("Grandpa handshake_ans_msg received, msg: ${msg}", ("msg", msg));
+        wlog("Randpa handshake_ans_msg received, msg: ${msg}", ("msg", msg));
         try {
             _peers[msg.public_key()] = ses_id;
         } catch (const fc::exception& e) {
-            elog("Grandpa handshake_ans_msg handler error, e: ${e}", ("e", e.what()));
+            elog("Randpa handshake_ans_msg handler error, e: ${e}", ("e", e.what()));
         }
     }
 
     void on(const on_accepted_block_event& event) {
-        dlog("Grandpa on_accepted_block_event event handled, block_id: ${id}, num: ${num}, creator: ${c}, bp_keys: ${bpk}",
+        dlog("Randpa on_accepted_block_event event handled, block_id: ${id}, num: ${num}, creator: ${c}, bp_keys: ${bpk}",
             ("id", event.block_id)
             ("num", get_block_num(event.block_id))
             ("c", event.creator_key)
@@ -437,7 +437,7 @@ private:
                                 event.creator_key, event.active_bp_keys);
         }
         catch (const NodeNotFoundError& e) {
-            elog("Grandpa cannot insert block into tree, base_block: ${base_id}, block: ${id}",
+            elog("Randpa cannot insert block into tree, base_block: ${base_id}, block: ${id}",
                 ("base_id", event.prev_block_id)
                 ("id", event.block_id)
             );
@@ -455,7 +455,7 @@ private:
     }
 
     void on(const on_irreversible_event& event) {
-        dlog("Grandpa on_irreversible_event event handled, block_id: ${bid}, num: ${num}",
+        dlog("Randpa on_irreversible_event event handled, block_id: ${bid}, num: ${num}",
             ("bid", event.block_id)
             ("num", get_block_num(event.block_id))
         );
@@ -464,7 +464,7 @@ private:
     }
 
     void on(const on_new_peer_event& event) {
-        elog("Grandpa on_new_peer_event event handled, ses_id: ${ses_id}", ("ses_id", event.ses_id));
+        elog("Randpa on_new_peer_event event handled, ses_id: ${ses_id}", ("ses_id", event.ses_id));
         auto msg = handshake_msg(handshake_type{get_lib()}, _private_key);
         dlog("Sending handshake msg");
         send(event.ses_id, msg);
@@ -473,7 +473,7 @@ private:
     template <typename T>
     void process_round_msg(uint32_t ses_id, const T& msg) {
         if (!_round) {
-            dlog("Grandpa round does not exists");
+            dlog("Randpa round does not exists");
             return;
         }
 
@@ -522,12 +522,12 @@ private:
             return;
         }
 
-        dlog("Grandpa finishing round, num: ${n}", ("n", _round->get_num()));
+        dlog("Randpa finishing round, num: ${n}", ("n", _round->get_num()));
         _round->finish();
 
-        if (_round->get_state() == grandpa_round::state::done) {
+        if (_round->get_state() == randpa_round::state::done) {
             auto proof = _round->get_proof();
-            ilog("Grandpa round reached supermajority, round num: ${n}, best block id: ${b}, best block num: ${bn}",
+            ilog("Randpa round reached supermajority, round num: ${n}, best block id: ${b}, best block num: ${bn}",
                 ("n", proof.round_num)
                 ("b", proof.best_block)
                 ("bn", get_block_num(proof.best_block))
@@ -540,8 +540,8 @@ private:
     }
 
     void new_round(uint32_t round_num, const public_key_type& primary) {
-        dlog("Grandpa staring round, num: ${n}", ("n", round_num));
-        _round.reset(new grandpa_round(round_num, primary, _prefix_tree, _private_key,
+        dlog("Randpa staring round, num: ${n}", ("n", round_num));
+        _round.reset(new randpa_round(round_num, primary, _prefix_tree, _private_key,
         [this](const prevote_msg& msg) {
             bcast(msg);
         },

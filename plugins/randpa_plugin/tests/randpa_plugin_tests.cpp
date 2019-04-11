@@ -1,5 +1,5 @@
-#include <eosio/grandpa_plugin/prefix_chain_tree.hpp>
-#include <eosio/grandpa_plugin/network_messages.hpp>
+#include <eosio/randpa_plugin/prefix_chain_tree.hpp>
+#include <eosio/randpa_plugin/network_messages.hpp>
 #include <fc/crypto/sha256.hpp>
 #include <boost/test/unit_test.hpp>
 #include <eosio/testing/tester.hpp>

@@ -64,7 +64,7 @@ using block_get_conf_msg = network_msg<block_get_conf_type>;
 using prevote_msg = network_msg<prevote_type>;
 using precommit_msg = network_msg<precommit_type>;
 
-using grandpa_net_msg_data = fc::static_variant<handshake_msg, handshake_ans_msg, prevote_msg, precommit_msg>;
+using randpa_net_msg_data = fc::static_variant<handshake_msg, handshake_ans_msg, prevote_msg, precommit_msg>;
 
 FC_REFLECT(prevote_type, (round_num)(base_block)(blocks))
 FC_REFLECT(precommit_type, (round_num)(block_id))

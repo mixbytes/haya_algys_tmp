@@ -1,38 +1,38 @@
 #pragma once
 #include "simulator.hpp"
 #include "database.hpp"
-#define SYNC_GRANDPA //SYNC mode
-#include <eosio/grandpa_plugin/grandpa.hpp>
+#define SYNC_RANDPA //SYNC mode
+#include <eosio/randpa_plugin/randpa.hpp>
 #include <mutex>
 #include <queue>
 
 using std::queue;
 using std::unique_ptr;
 using std::make_unique;
-using grandpa_ptr = std::unique_ptr<grandpa>;
+using randpa_ptr = std::unique_ptr<randpa>;
 
-class GrandpaNode: public Node {
+class RandpaNode: public Node {
 public:
-    explicit GrandpaNode(int id, Network && net, fork_db && db_, private_key_type private_key):
+    explicit RandpaNode(int id, Network && net, fork_db && db_, private_key_type private_key):
         Node(id, std::move(net), std::move(db_), std::move(private_key))
     {
         init();
         prefix_tree_ptr tree(new prefix_tree(std::make_shared<tree_node>(tree_node {
             db.last_irreversible_block_id()
         })));
-        grandpa_impl->start(tree);
+        randpa_impl->start(tree);
     }
 
     void init() {
         init_channels();
         init_providers();
-        init_grandpa();
+        init_randpa();
     }
 
     virtual void restart() override {
         cout << "[Node] #" << id << " restarted " << endl;
         init();
-        grandpa_impl->start(copy_fork_db());
+        randpa_impl->start(copy_fork_db());
         auto runner = get_runner();
         auto from = this->id;
         for (uint32_t to = 0; to < runner->get_instances(); to++) {
@@ -62,25 +62,25 @@ public:
         return tree;
     }
 
-    ~GrandpaNode() {
-        grandpa_impl->stop();
+    ~RandpaNode() {
+        randpa_impl->stop();
     }
 
     void on_receive(uint32_t from, void* msg) override {
         cout << "[Node] #" << this->id << " on_receive " << endl;
-        auto data = *static_cast<grandpa_net_msg*>(msg);
+        auto data = *static_cast<randpa_net_msg*>(msg);
         data.ses_id = from;
         in_net_ch->send(data);
     }
 
     void on_new_peer_event(uint32_t id) override {
         cout << "[Node] #" << this->id << " on_new_peer_event " << endl;
-        ev_ch->send(grandpa_event { ::on_new_peer_event { id } });
+        ev_ch->send(randpa_event { ::on_new_peer_event { id } });
     }
 
     void on_accepted_block_event(pair<block_id_type, public_key_type> block) override {
         cout << "[Node] #" << this->id << " on_accepted_block_event " << endl;
-        ev_ch->send(grandpa_event { ::on_accepted_block_event { block.first, db.fetch_prev_block_id(block.first),
+        ev_ch->send(randpa_event { ::on_accepted_block_event { block.first, db.fetch_prev_block_id(block.first),
                                                                 block.second, get_active_bp_keys()
                                                                 } });
     }
@@ -92,8 +92,8 @@ private:
         ev_ch = std::make_shared<event_channel>();
         finality_ch = std::make_shared<finality_channel>();
 
-        out_net_ch->subscribe([this](const grandpa_net_msg& msg) {
-            send<grandpa_net_msg>(msg.ses_id, msg);
+        out_net_ch->subscribe([this](const randpa_net_msg& msg) {
+            send<randpa_net_msg>(msg.ses_id, msg);
         });
 
         finality_ch->subscribe([this](const block_id_type& id) {
@@ -119,9 +119,9 @@ private:
         });
     }
 
-    void init_grandpa() {
-        grandpa_impl = unique_ptr<grandpa>(new grandpa());
-        (*grandpa_impl)
+    void init_randpa() {
+        randpa_impl = unique_ptr<randpa>(new randpa());
+        (*randpa_impl)
             .set_event_channel(ev_ch)
             .set_in_net_channel(in_net_ch)
             .set_out_net_channel(out_net_ch)
@@ -141,6 +141,6 @@ private:
     lib_prodiver_ptr lib_prov;
     prods_provider_ptr prods_prov;
 
-    grandpa_ptr grandpa_impl;
+    randpa_ptr randpa_impl;
 };
 

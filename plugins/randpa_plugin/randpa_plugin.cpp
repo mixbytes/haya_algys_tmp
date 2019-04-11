@@ -1,7 +1,7 @@
-#include <eosio/grandpa_plugin/grandpa_plugin.hpp>
-#include <eosio/grandpa_plugin/network_messages.hpp>
-#include <eosio/grandpa_plugin/prefix_chain_tree.hpp>
-#include <eosio/grandpa_plugin/grandpa.hpp>
+#include <eosio/randpa_plugin/randpa_plugin.hpp>
+#include <eosio/randpa_plugin/network_messages.hpp>
+#include <eosio/randpa_plugin/prefix_chain_tree.hpp>
+#include <eosio/randpa_plugin/randpa.hpp>
 #include <eosio/chain/plugin_interface.hpp>
 #include <fc/io/json.hpp>
 #include <queue>
@@ -15,16 +15,16 @@ using namespace std::chrono_literals;
 using namespace eosio::chain;
 using namespace eosio::chain::plugin_interface;
 
-static appbase::abstract_plugin& _grandpa_plugin = app().register_plugin<grandpa_plugin>();
+static appbase::abstract_plugin& _randpa_plugin = app().register_plugin<randpa_plugin>();
 
 
 static constexpr uint32_t net_message_types_base = 100;
 
-class grandpa_plugin_impl {
+class randpa_plugin_impl {
 public:
-    grandpa_plugin_impl() {}
+    randpa_plugin_impl() {}
 
-    grandpa _grandpa;
+    randpa _randpa;
 
     channels::irreversible_block::channel_type::handle _on_irb_handle;
     channels::accepted_block::channel_type::handle _on_accepted_block_handle;
@@ -32,7 +32,7 @@ public:
 
     template <typename T>
     static constexpr uint32_t get_net_msg_type(const T& msg = {}) {
-        return net_message_types_base + grandpa_net_msg_data::tag<T>::value;
+        return net_message_types_base + randpa_net_msg_data::tag<T>::value;
     }
 
     static auto get_bp_keys(block_state_ptr s) {
@@ -49,7 +49,7 @@ public:
         auto ev_ch = std::make_shared<event_channel>();
         auto finality_ch = std::make_shared<finality_channel>();
 
-        _grandpa
+        _randpa
             .set_in_net_channel(in_net_ch)
             .set_out_net_channel(out_net_ch)
             .set_event_channel(ev_ch)
@@ -63,7 +63,7 @@ public:
         _on_accepted_block_handle = app().get_channel<channels::accepted_block>()
         .subscribe( [ev_ch]( block_state_ptr s ) {
 
-            ev_ch->send(grandpa_event { on_accepted_block_event {
+            ev_ch->send(randpa_event { on_accepted_block_event {
                     s->id,
                     s->header.previous,
                     s->block_signing_key,
@@ -73,31 +73,31 @@ public:
 
         _on_irb_handle = app().get_channel<channels::irreversible_block>()
         .subscribe( [ev_ch]( block_state_ptr s ) {
-            ev_ch->send(grandpa_event { on_irreversible_event { s->id } });
+            ev_ch->send(randpa_event { on_irreversible_event { s->id } });
         });
 
         _on_new_peer_handle = app().get_channel<bnet_plugin::new_peer>()
         .subscribe( [ev_ch]( uint32_t ses_id ) {
-            ev_ch->send(grandpa_event { on_new_peer_event { ses_id } });
+            ev_ch->send(randpa_event { on_new_peer_event { ses_id } });
         });
 
-        out_net_ch->subscribe([this](const grandpa_net_msg& msg) {
+        out_net_ch->subscribe([this](const randpa_net_msg& msg) {
             auto data = msg.data;
             switch (data.which()){
-                case grandpa_net_msg_data::tag<prevote_msg>::value:
+                case randpa_net_msg_data::tag<prevote_msg>::value:
                     send(msg.ses_id, data.get<prevote_msg>());
                     break;
-                case grandpa_net_msg_data::tag<precommit_msg>::value:
+                case randpa_net_msg_data::tag<precommit_msg>::value:
                     send(msg.ses_id, data.get<precommit_msg>());
                     break;
-                case grandpa_net_msg_data::tag<handshake_msg>::value:
+                case randpa_net_msg_data::tag<handshake_msg>::value:
                     send(msg.ses_id, data.get<handshake_msg>());
                     break;
-                case grandpa_net_msg_data::tag<handshake_ans_msg>::value:
+                case randpa_net_msg_data::tag<handshake_ans_msg>::value:
                     send(msg.ses_id, data.get<handshake_ans_msg>());
                     break;
                 default:
-                    ilog("Grandpa message sent, but handler not found, type: ${type}",
+                    ilog("randpa message sent, but handler not found, type: ${type}",
                         ("type", data.which())
                     );
                 break;
@@ -136,12 +136,12 @@ public:
             return keys;
         });
 
-        _grandpa
+        _randpa
             .set_prev_block_provider(prev_block_pr)
             .set_lib_provider(lib_pr)
             .set_prods_provider(prods_pr);
 
-        _grandpa.start(copy_fork_db());
+        _randpa.start(copy_fork_db());
     }
 
     prefix_tree_ptr copy_fork_db() {
@@ -173,7 +173,7 @@ public:
     }
 
     void stop() {
-        _grandpa.stop();
+        _randpa.stop();
     }
 
     template <typename T>
@@ -187,43 +187,43 @@ public:
         app().get_plugin<bnet_plugin>()
         .subscribe<T>(get_net_msg_type<T>(),
         [ch](uint32_t ses_id, const T & msg) {
-            dlog("Grandpa network message received, ses_id: ${ses_id}, type: ${type}, msg: ${msg}",
+            dlog("randpa network message received, ses_id: ${ses_id}, type: ${type}, msg: ${msg}",
                 ("ses_id", ses_id)
                 ("type", get_net_msg_type<T>())
                 ("msg", fc::json::to_string(fc::variant(msg)))
             );
-            ch->send(grandpa_net_msg { ses_id, msg });
+            ch->send(randpa_net_msg { ses_id, msg });
         });
     }
 };
 
 
-grandpa_plugin::grandpa_plugin():my(new grandpa_plugin_impl()){}
-grandpa_plugin::~grandpa_plugin(){}
+randpa_plugin::randpa_plugin():my(new randpa_plugin_impl()){}
+randpa_plugin::~randpa_plugin(){}
 
-void grandpa_plugin::set_program_options(options_description& /*cli*/, options_description& cfg) {
+void randpa_plugin::set_program_options(options_description& /*cli*/, options_description& cfg) {
     cfg.add_options()
-        ("grandpa-private-key", boost::program_options::value<string>(), "Private key for Grandpa finalizer")
+        ("randpa-private-key", boost::program_options::value<string>(), "Private key for randpa finalizer")
     ;
 }
 
-void grandpa_plugin::plugin_initialize(const variables_map& options) {
-    const auto iterator = options.find("grandpa-private-key");
-    FC_ASSERT(iterator != options.end(), "Argument --grandpa-private-key not provided");
+void randpa_plugin::plugin_initialize(const variables_map& options) {
+    const auto iterator = options.find("randpa-private-key");
+    FC_ASSERT(iterator != options.end(), "Argument --randpa-private-key not provided");
     auto wif_key = iterator->second.as<std::string>();
     try {
-        my->_grandpa.set_private_key(private_key_type(wif_key));
+        my->_randpa.set_private_key(private_key_type(wif_key));
     }
     catch ( fc::exception& e ) {
         elog("Malformed private key: ${key}", ("key", wif_key));
     }
 }
 
-void grandpa_plugin::plugin_startup() {
+void randpa_plugin::plugin_startup() {
     my->start();
 }
 
-void grandpa_plugin::plugin_shutdown() {
+void randpa_plugin::plugin_shutdown() {
     my->stop();
 }
 
