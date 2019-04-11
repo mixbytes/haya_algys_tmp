@@ -179,6 +179,8 @@ public:
         std::cout << "On accepted block event handled by " << this->id << " at " << get_clock().now() << endl;
     }
 
+    virtual void restart() {}
+
     uint32_t id;
     bool is_producer = true;
 
@@ -375,7 +377,11 @@ public:
             auto& node_db = node->db;
             // sync done
             cout << "[Node #" << node->id << "]" " best_peer=" << best_peer->id << endl;
+
+            // Copy fork_db and restart
             node_db.set_root(deep_copy(peer_db.get_root()));
+            node->restart();
+
             // insert chains that you failed to insert previously
             auto& pending_chains = node->pending_chains;
             while (!pending_chains.empty()) {
