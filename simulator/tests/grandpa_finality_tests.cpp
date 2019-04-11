@@ -32,7 +32,7 @@ TEST(grandpa_finality, three_nodes_large_roundtrip) {
     graph_type g;
     g.push_back(v0);
     runner.load_graph(g);
-    runner.add_stop_task(4 * runner.get_slot_ms());
+    runner.add_stop_task(5 * runner.get_slot_ms());
     runner.add_update_delay_task(1 * runner.get_slot_ms(), 0, 2, 10);
     runner.run<GrandpaNode>();
     EXPECT_GE(get_block_height(runner.get_db(0).last_irreversible_block_id()), 2);
