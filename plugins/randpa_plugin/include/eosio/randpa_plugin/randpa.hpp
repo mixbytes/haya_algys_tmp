@@ -10,6 +10,7 @@
 #include <thread>
 #include <condition_variable>
 
+namespace randpa_finality {
 
 using ::fc::static_variant;
 using std::shared_ptr;
@@ -572,3 +573,5 @@ private:
         _lib = lib_id;
     }
 };
+
+} //namespace randpa_finality

@@ -14,6 +14,7 @@ namespace eosio {
 using namespace std::chrono_literals;
 using namespace eosio::chain;
 using namespace eosio::chain::plugin_interface;
+using namespace randpa_finality;
 
 static appbase::abstract_plugin& _randpa_plugin = app().register_plugin<randpa_plugin>();
 

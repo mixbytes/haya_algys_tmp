@@ -6,6 +6,8 @@
 #include <map>
 #include <set>
 
+namespace randpa_finality {
+
 using std::vector;
 using std::shared_ptr;
 using std::weak_ptr;
@@ -253,3 +255,5 @@ private:
         }
     }
 };
+
+} //namespace randpa_finality

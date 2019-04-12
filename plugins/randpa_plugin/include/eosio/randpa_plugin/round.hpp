@@ -3,6 +3,8 @@
 #include "prefix_chain_tree.hpp"
 #include "network_messages.hpp"
 
+namespace randpa_finality {
+
 using tree_node = prefix_node<prevote_msg>;
 using prefix_tree = prefix_chain_tree<tree_node>;
 
@@ -306,3 +308,5 @@ private:
     std::set<public_key_type> prevoted_keys;
     std::set<public_key_type> precommited_keys;
 };
+
+} //namespace randpa_finality
