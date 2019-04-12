@@ -461,6 +461,11 @@ private:
             ("num", get_block_num(event.block_id))
         );
 
+        if (get_block_num(event.block_id) <= get_block_num(_prefix_tree->get_root()->block_id)) {
+            ilog("Randpa handled on_irreversible for old block");
+            return;
+        }
+
         update_lib(event.block_id);
     }
 
