@@ -16,6 +16,7 @@
 #include <fc/crypto/private_key.hpp>
 #include <fc/bitutil.hpp>
 
+namespace randpa_finality {
 
 using public_key_type = fc::crypto::public_key;
 using private_key_type = fc::crypto::private_key;
@@ -26,3 +27,5 @@ using digest_type = fc::sha256;
 uint32_t get_block_num(const block_id_type& id) {
     return fc::endian_reverse_u32(id._hash[0]);
 }
+
+} //namespace randpa_finality
