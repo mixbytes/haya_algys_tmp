@@ -12,6 +12,7 @@ using namespace eosio;
 using namespace chain;
 using std::vector;
 using namespace fc::crypto;
+using namespace randpa_finality;
 
 using tree_node = prefix_node<uint32_t>;
 using prefix_tree = prefix_chain_tree<tree_node>;

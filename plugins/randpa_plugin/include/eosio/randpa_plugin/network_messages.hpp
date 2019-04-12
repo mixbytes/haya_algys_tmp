@@ -3,6 +3,8 @@
 #include "types.hpp"
 #include <fc/reflect/reflect.hpp>
 
+namespace randpa_finality {
+
 using std::vector;
 
 
@@ -64,13 +66,15 @@ using block_get_conf_msg = network_msg<block_get_conf_type>;
 using prevote_msg = network_msg<prevote_type>;
 using precommit_msg = network_msg<precommit_type>;
 
-using randpa_net_msg_data = fc::static_variant<handshake_msg, handshake_ans_msg, prevote_msg, precommit_msg>;
+using randpa_net_msg_data = ::fc::static_variant<handshake_msg, handshake_ans_msg, prevote_msg, precommit_msg>;
 
-FC_REFLECT(prevote_type, (round_num)(base_block)(blocks))
-FC_REFLECT(precommit_type, (round_num)(block_id))
+} //namespace randpa_finality
 
-FC_REFLECT(block_get_conf_type, (block_id))
-FC_REFLECT(handshake_type, (lib))
-FC_REFLECT(handshake_ans_type, (lib))
+FC_REFLECT(randpa_finality::prevote_type, (round_num)(base_block)(blocks))
+FC_REFLECT(randpa_finality::precommit_type, (round_num)(block_id))
 
-FC_REFLECT_TEMPLATE((typename T), network_msg<T>, (data)(signature))
+FC_REFLECT(randpa_finality::block_get_conf_type, (block_id))
+FC_REFLECT(randpa_finality::handshake_type, (lib))
+FC_REFLECT(randpa_finality::handshake_ans_type, (lib))
+
+FC_REFLECT_TEMPLATE((typename T), randpa_finality::network_msg<T>, (data)(signature))

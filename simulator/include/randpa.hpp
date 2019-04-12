@@ -6,6 +6,8 @@
 #include <mutex>
 #include <queue>
 
+using namespace randpa_finality;
+
 using std::queue;
 using std::unique_ptr;
 using std::make_unique;
