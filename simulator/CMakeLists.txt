@@ -11,14 +11,13 @@ ExternalProject_Add(gtest
         URL https://github.com/google/googletest/archive/release-1.8.1.zip
         PREFIX ${CMAKE_CURRENT_BINARY_DIR}/gtest
         INSTALL_COMMAND ""
-        )
+        BUILD_BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/gtest/src/gtest-build/googlemock/gtest/libgtest.a")
 ExternalProject_Get_Property(gtest source_dir binary_dir)
 
-add_dependencies(simulator gtest)
 include_directories(${source_dir}/googletest/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../plugins/randpa_plugin/include)
-
 target_link_libraries(simulator ${binary_dir}/googlemock/gtest/libgtest.a pthread fc)
+add_dependencies(simulator gtest)
 
 ##################################
 # Just make the test runnable with
