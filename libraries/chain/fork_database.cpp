@@ -127,8 +127,13 @@ namespace eosio { namespace chain {
       EOS_ASSERT( n, fork_database_exception, "attempt to add null block state" );
       EOS_ASSERT( my->head, fork_db_block_not_found, "no head block set" );
 
+      auto prior = my->index.find( n->block->previous );
+
+      if (prior != my->index.end() && (*prior)->bft_irreversible_blocknum > n->bft_irreversible_blocknum) {
+         n->bft_irreversible_blocknum = (*prior)->bft_irreversible_blocknum;
+      }
+
       if( !skip_validate_previous ) {
-         auto prior = my->index.find( n->block->previous );
          EOS_ASSERT( prior != my->index.end(), unlinkable_block_exception,
                      "unlinkable block", ("id", n->block->id())("previous", n->block->previous) );
       }
