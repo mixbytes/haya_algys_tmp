@@ -238,6 +238,8 @@ namespace eosio {
            uint32_t block_num()const { return block_header::num_from_id(id); }
         };
 
+        bool _duplicate_session = false;
+
         typedef boost::multi_index_container<block_status,
            indexed_by<
               ordered_unique< tag<by_id>,  member<block_status,block_id_type,&block_status::id> >,
@@ -1019,8 +1021,6 @@ namespace eosio {
            }
         }
 
-        void check_for_redundant_connection();
-
         void on( const signed_block_ptr& b ) {
            peer_ilog(this, "received signed_block_ptr");
            if (!b) {
@@ -1169,6 +1169,8 @@ namespace eosio {
          bool                                                   _follow_irreversible = false;
 
          std::vector<std::string>                               _connect_to_peers; /// list of peers to connect to
+         std::map<std::string, public_key_type>                 _peer_to_peer_id;
+         std::set<public_key_type>                              _connected_peer_ids;
          std::vector<std::thread>                               _socket_threads;
          int32_t                                                _num_threads = 1;
 
@@ -1237,6 +1239,9 @@ namespace eosio {
             if( _sessions.end() != itr ) {
                _sessions.erase(itr);
                _sessions_by_num.erase(session_num);
+               if (!s->_duplicate_session) {
+                   _connected_peer_ids.erase(s->_remote_peer_id);
+               }
             }
          }
 
@@ -1299,6 +1304,12 @@ namespace eosio {
 
          void on_reconnect_peers() {
              for( const auto& peer : _connect_to_peers ) {
+                 auto iter = _peer_to_peer_id.find(peer);
+                 if (iter != _peer_to_peer_id.end() &&
+                     _connected_peer_ids.find(iter->second) != _connected_peer_ids.end()) {
+                        // already connected
+                        continue;
+                 }
                 bool found = false;
                 for( const auto& con : _sessions ) {
                    auto ses = con.second.lock();
@@ -1578,16 +1589,6 @@ namespace eosio {
       });
    }
 
-   void session::check_for_redundant_connection() {
-     app().post(priority::low, [self=shared_from_this()]{
-       self->_net_plugin->for_each_session( [self]( auto ses ){
-         if( ses != self && ses->_remote_peer_id == self->_remote_peer_id ) {
-           self->do_goodbye( "redundant connection" );
-         }
-       });
-     });
-   }
-
    void session::on( const hello& hi, fc::datastream<const char*>& ds ) {
       peer_ilog(this, "received hello");
       _recv_remote_hello     = true;
@@ -1605,7 +1606,21 @@ namespace eosio {
          return do_goodbye( "need newer protocol version that supports sending only irreversible blocks" );
       }
 
-      if ( hi.protocol_version >= "1.0.1" ) {
+
+
+        if (!_peer.empty()) {
+            _net_plugin->_peer_to_peer_id[_peer] = hi.peer_id;
+        }
+
+        auto& peer_ids = _net_plugin->_connected_peer_ids;
+        if (peer_ids.find(hi.peer_id) != peer_ids.end()) {
+            _duplicate_session = true;
+            return do_goodbye("duplicate session");
+        }
+        peer_ids.insert(hi.peer_id);
+
+
+       if ( hi.protocol_version >= "1.0.1" ) {
          //optional extensions
          while ( 0 < ds.remaining() ) {
             unsigned_int size;
@@ -1637,9 +1652,6 @@ namespace eosio {
 
       for( const auto& id : hi.pending_block_ids )
          mark_block_status( id, true, false );
-
-      check_for_redundant_connection();
-
    }
 
    void session::on( const packed_transaction_ptr& p ) {
