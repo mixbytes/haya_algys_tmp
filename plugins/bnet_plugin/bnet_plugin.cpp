@@ -1606,21 +1606,20 @@ namespace eosio {
          return do_goodbye( "need newer protocol version that supports sending only irreversible blocks" );
       }
 
+      if (!_peer.empty()) {
+         _net_plugin->_peer_to_peer_id[_peer] = hi.peer_id;
+      }
+
+      auto& peer_ids = _net_plugin->_connected_peer_ids;
+      if (peer_ids.find(hi.peer_id) != peer_ids.end()) {
+         _duplicate_session = true;
+         dlog("duplicate session: num: ${num}", ("num", _session_num));
+         return do_goodbye("duplicate session");
+      }
+      peer_ids.insert(hi.peer_id);
 
 
-        if (!_peer.empty()) {
-            _net_plugin->_peer_to_peer_id[_peer] = hi.peer_id;
-        }
-
-        auto& peer_ids = _net_plugin->_connected_peer_ids;
-        if (peer_ids.find(hi.peer_id) != peer_ids.end()) {
-            _duplicate_session = true;
-            return do_goodbye("duplicate session");
-        }
-        peer_ids.insert(hi.peer_id);
-
-
-       if ( hi.protocol_version >= "1.0.1" ) {
+      if ( hi.protocol_version >= "1.0.1" ) {
          //optional extensions
          while ( 0 < ds.remaining() ) {
             unsigned_int size;
