@@ -297,7 +297,7 @@ private:
                 process_event(msg.get<randpa_event>());
                 break;
             default:
-                elog("Randpa received unknown message, type: ${type}", ("type", msg.which()));
+                wlog("Randpa received unknown message, type: ${type}", ("type", msg.which()));
                 break;
         }
     }
@@ -325,7 +325,7 @@ private:
                 on(ses_id, data.get<handshake_ans_msg>());
                break;
             default:
-                ilog("Randpa message received, but handler not found, type: ${type}",
+                wlog("Randpa message received, but handler not found, type: ${type}",
                     ("type", data.which())
                 );
                 break;
@@ -345,7 +345,7 @@ private:
                 on(data.get<on_new_peer_event>());
                 break;
             default:
-                ilog("Randpa event received, but handler not found, type: ${type}",
+                wlog("Randpa event received, but handler not found, type: ${type}",
                     ("type", data.which())
                 );
                 break;
@@ -353,7 +353,7 @@ private:
     }
 
     void on(uint32_t ses_id, const handshake_msg& msg) {
-        wlog("Randpa handshake_msg received, msg: ${msg}", ("msg", msg));
+        ilog("Randpa handshake_msg received, ses_id: ${ses_id}, from: ${pk}", ("ses_id", ses_id)("pk", msg.public_key()));
         try {
             _peers[msg.public_key()] = ses_id;
 
@@ -364,7 +364,7 @@ private:
     }
 
     void on(uint32_t ses_id, const handshake_ans_msg& msg) {
-        wlog("Randpa handshake_ans_msg received, msg: ${msg}", ("msg", msg));
+        ilog("Randpa handshake_ans_msg received, ses_id: ${ses_id}, from: ${pk}", ("ses_id", ses_id)("pk", msg.public_key()));
         try {
             _peers[msg.public_key()] = ses_id;
         } catch (const fc::exception& e) {
@@ -409,7 +409,7 @@ private:
         );
 
         if (get_block_num(event.block_id) <= get_block_num(_prefix_tree->get_root()->block_id)) {
-            ilog("Randpa handled on_irreversible for old block");
+            wlog("Randpa handled on_irreversible for old block");
             return;
         }
 
@@ -417,7 +417,7 @@ private:
     }
 
     void on(const on_new_peer_event& event) {
-        elog("Randpa on_new_peer_event event handled, ses_id: ${ses_id}", ("ses_id", event.ses_id));
+        dlog("Randpa on_new_peer_event event handled, ses_id: ${ses_id}", ("ses_id", event.ses_id));
         auto msg = handshake_msg(handshake_type{_lib}, _private_key);
         dlog("Sending handshake msg");
         send(event.ses_id, msg);

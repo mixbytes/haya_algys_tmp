@@ -203,7 +203,6 @@ private:
     void insert_blocks(node_ptr node, const vector<block_id_type>& blocks, const public_key_type& creator_key,
             const set<public_key_type>& active_bp_keys) {
         for (const auto& block_id : blocks) {
-            dlog("Block, id: ${id}", ("id", block_id));
             auto next_node = node->get_matching_node(block_id);
             if (!next_node) {
                 next_node = std::make_shared<NodeType>(NodeType{block_id,
@@ -227,15 +226,12 @@ private:
                            const conf_ptr& conf) {
         auto max_conf_node = node;
         node->confirmation_data[sender_key] = conf;
-        dlog("Base block confirmations, id: ${id}, count: ${count}", ("id", node->block_id)("count", node->confirmation_data.size()));
 
         for (const auto& block_id : blocks) {
-            dlog("Block, id: ${id}", ("id", block_id));
             node = node->get_matching_node(block_id);
             if (!node) {
                 break;
             }
-            dlog("Confirmations, count: ${count}", ("count", node->confirmation_data.size()));
             node->confirmation_data[sender_key] = conf;
             if (max_conf_node->confirmation_data.size() <= node->confirmation_data.size()) {
                 max_conf_node = node;
