@@ -428,7 +428,7 @@ namespace eosio {
            do_hello();
            do_read();
 
-           app().get_channel<bnet_plugin::new_peer>().publish(_session_num);
+           app().get_channel<bnet_plugin::new_peer>().publish(priority::medium, _session_num);
         }
 
         /**
@@ -887,7 +887,7 @@ namespace eosio {
            do_hello();
            do_read();
 
-           app().get_channel<bnet_plugin::new_peer>().publish(_session_num);
+           app().get_channel<bnet_plugin::new_peer>().publish(priority::medium, _session_num);
         }
 
         void do_read() {
@@ -1233,7 +1233,6 @@ namespace eosio {
          }
 
          void on_session_close( const session* s, uint32_t session_num ) {
-            verify_strand_in_this_thread(app().get_io_service().get_executor(), __func__, __LINE__);
             auto itr = _sessions.find(s);
             if( _sessions.end() != itr ) {
                _sessions.erase(itr);
@@ -1539,7 +1538,7 @@ namespace eosio {
    session::~session() {
      wlog( "close session ${n}",("n",_session_num) );
      std::weak_ptr<bnet_plugin_impl> netp = _net_plugin;
-     _app_ios.post( [netp,ses=this, session_num=this->_session_num]{
+     app().post(priority::medium, [netp,ses=this, session_num=this->_session_num]{
         if( auto net = netp.lock() )
            net->on_session_close(ses, session_num);
      });
