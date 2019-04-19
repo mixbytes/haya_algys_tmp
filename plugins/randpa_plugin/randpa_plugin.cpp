@@ -60,6 +60,7 @@ public:
         subscribe<handshake_ans_msg>(in_net_ch);
         subscribe<prevote_msg>(in_net_ch);
         subscribe<precommit_msg>(in_net_ch);
+        subscribe<proof_msg>(in_net_ch);
 
         _on_accepted_block_handle = app().get_channel<channels::accepted_block>()
         .subscribe( [ev_ch]( block_state_ptr s ) {
@@ -92,6 +93,9 @@ public:
                 case randpa_net_msg_data::tag<precommit_msg>::value:
                     send(msg.ses_id, data.get<precommit_msg>());
                     break;
+                case randpa_net_msg_data::tag<proof_msg>::value:
+                    send(msg.ses_id, data.get<proof_msg>());
+                    break;
                 case randpa_net_msg_data::tag<handshake_msg>::value:
                     send(msg.ses_id, data.get<handshake_msg>());
                     break;
@@ -99,7 +103,7 @@ public:
                     send(msg.ses_id, data.get<handshake_ans_msg>());
                     break;
                 default:
-                    ilog("randpa message sent, but handler not found, type: ${type}",
+                    wlog("randpa message sent, but handler not found, type: ${type}",
                         ("type", data.which())
                     );
                 break;
