@@ -25,12 +25,6 @@ public:
         finished, // after finish
     };
 
-    struct proof {
-        uint32_t round_num;
-        block_id_type best_block;
-        std::vector<prevote_msg> prevotes;
-        std::vector<precommit_msg> precommites;
-    };
 
 private:
     using prevote_bcaster_type = std::function<void(const prevote_msg&)>;
@@ -70,7 +64,11 @@ public:
         return state;
     }
 
-    proof get_proof() {
+    void set_state(const state& s) {
+        state = s;
+    }
+
+    proof_type get_proof() {
         FC_ASSERT(state == state::done, "state should be `done`");
 
         return proof;
@@ -127,15 +125,16 @@ public:
         precommit();
     }
 
-    void finish() {
+    bool finish() {
         if (state != state::done) {
             dlog("Round failed, num: ${n}, state: ${s}",
                 ("n", num)
                 ("s", static_cast<uint32_t>(state))
             );
             state = state::fail;
-            return;
+            return false;
         }
+        return true;
     }
 
 private:
@@ -265,9 +264,9 @@ private:
 
     void add_precommit(const precommit_msg& msg) {
         precommited_keys.insert(msg.public_key());
-        proof.precommites.push_back(msg);
+        proof.precommits.push_back(msg);
 
-        if (proof.precommites.size() > 2 * best_node->active_bp_keys.size() / 3) {
+        if (proof.precommits.size() > 2 * best_node->active_bp_keys.size() / 3) {
             dlog("Precommit threshold reached, round: ${r}, best block: ${b}",
                 ("r", num)
                 ("b", best_node->block_id)
@@ -298,7 +297,7 @@ private:
     public_key_type primary;
     prefix_tree_ptr tree;
     state state { state::init };
-    proof proof;
+    proof_type proof;
     tree_node_ptr best_node;
     private_key_type private_key;
     prevote_bcaster_type prevote_bcaster;
