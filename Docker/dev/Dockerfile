@@ -12,7 +12,7 @@ RUN echo "$(git rev-parse --abbrev-ref HEAD):$(git rev-parse HEAD)" > /etc/eosio
     && cmake --build /opt/eosio --target install \
     && cp /cyberos/Docker/config.ini / && ln -s /opt/eosio/contracts /contracts && cp /cyberos/Docker/nodeosd.sh /opt/eosio/bin/nodeosd.sh && ln -s /cyberos/tutorials /tutorials
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -y install openssl ca-certificates vim psmisc python3-pip && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -y install openssl ca-certificates vim psmisc python3-pip libcurl4-openssl-dev libusb-1.0 && rm -rf /var/lib/apt/lists/*
 RUN pip3 install numpy
 ENV EOSIO_ROOT=/opt/eosio
 RUN chmod +x /opt/eosio/bin/nodeosd.sh
