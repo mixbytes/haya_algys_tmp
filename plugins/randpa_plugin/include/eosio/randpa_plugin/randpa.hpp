@@ -318,6 +318,9 @@ private:
             case randpa_net_msg_data::tag<precommit_msg>::value:
                 process_round_msg(ses_id, data.get<precommit_msg>());
                 break;
+            case randpa_net_msg_data::tag<proof_msg>::value:
+                on(ses_id, data.get<proof_msg>());
+                break;
             case randpa_net_msg_data::tag<handshake_msg>::value:
                 on(ses_id, data.get<handshake_msg>());
                 break;
@@ -349,6 +352,72 @@ private:
                     ("type", data.which())
                 );
                 break;
+        }
+    }
+
+    bool validate_precommit(const precommit_type& precommit, const public_key_type& precommiter_pub_key,
+            const block_id_type& best_block, const set<public_key_type>& active_bp_keys) {
+        if (precommit.block_id != best_block) {
+            dlog("Precommit block ${pbid}, best block: ${bbid}",
+                    ("pbid", precommit.block_id)("bbid", best_block));
+        } else if (_round->get_num() != precommit.round_num) {
+            dlog("Precommit for wrong round, precommit: ${pr} current: ${cr}",
+                    ("pr", _round->get_num())("cr", precommit.round_num));
+        } else if (!active_bp_keys.count(precommiter_pub_key)) {
+            dlog("Precommitter public key is not in active bp keys: ${pub_key}",
+                 ("pub_key", precommiter_pub_key));
+        } else {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool validate_proof(const proof_type& proof) {
+        auto best_block = proof.best_block;
+        auto node = _prefix_tree->find(best_block);
+
+        if (!node) {
+            wlog("Received proof for unknown block: ${block_id}", ("block_id", best_block));
+            return false;
+        }
+
+        set<public_key_type> precommited_keys;
+
+        for (const auto& precommit : proof.precommits) {
+            const auto& precommiter_pub_key = precommit.public_key();
+            if (!validate_precommit(precommit.data, precommiter_pub_key,
+                    best_block, node->active_bp_keys)) {
+                wlog("Precommit validation failed for ${id}", ("id", precommit.data.block_id));
+                return false;
+            }
+            precommited_keys.insert(precommiter_pub_key);
+        }
+        return precommited_keys.size() > node->active_bp_keys.size() * 2 / 3;
+    }
+
+    void on(uint32_t ses_id, const proof_msg& msg) {
+        wlog("Randpa proof_msg received, msg: ${msg}", ("msg", msg));
+
+        try {
+            _peers[msg.public_key()] = ses_id;
+        } catch (const fc::exception& e) {
+            elog("Randpa proof_msg handler error, e: ${e}", ("e", e.what()));
+            return;
+        }
+
+        const auto& proof = msg.data;
+        if (!validate_proof(proof)) {
+            wlog("Invalid proof received from ${peer}", ("peer", msg.public_key()));
+            return;
+        }
+
+        ilog("Successfully validated proof for block ${id}", ("id", proof.best_block));
+
+        _round->set_state(randpa_round::state::done);
+        if (get_block_num(_lib) < get_block_num(proof.best_block)) {
+            _finality_channel->send(proof.best_block);
+            bcast(proof_msg(proof, _private_key));
         }
     }
 
@@ -476,19 +545,20 @@ private:
         }
 
         dlog("Randpa finishing round, num: ${n}", ("n", _round->get_num()));
-        _round->finish();
+        if (!_round->finish()) {
+            return;
+        }
 
-        if (_round->get_state() == randpa_round::state::done) {
-            auto proof = _round->get_proof();
-            ilog("Randpa round reached supermajority, round num: ${n}, best block id: ${b}, best block num: ${bn}",
-                ("n", proof.round_num)
-                ("b", proof.best_block)
-                ("bn", get_block_num(proof.best_block))
-            );
+        auto proof = _round->get_proof();
+        ilog("Randpa round reached supermajority, round num: ${n}, best block id: ${b}, best block num: ${bn}",
+            ("n", proof.round_num)
+            ("b", proof.best_block)
+            ("bn", get_block_num(proof.best_block))
+        );
 
-            if (get_block_num(_lib) < get_block_num(proof.best_block)) {
-                _finality_channel->send(proof.best_block);
-            }
+        if (get_block_num(_lib) < get_block_num(proof.best_block)) {
+            _finality_channel->send(proof.best_block);
+            bcast(proof_msg(proof, _private_key));
         }
     }
 
