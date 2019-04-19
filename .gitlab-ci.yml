@@ -34,8 +34,7 @@ publish-nomral:
     - schedules
   <<: *docker-login
   script:
-    - cd Docker
-    - docker build -t cyberos .
+    - docker build -f Docker/Dockerfile -t cyberos .
     - docker tag cyberos ${REGISTRY}/cyberos:${CI_COMMIT_SHA:0:8}
     - docker tag cyberos ${REGISTRY}/cyberos:${CI_COMMIT_REF_NAME}-latest
     - docker tag cyberos ${REGISTRY}/cyberos:latest
@@ -56,8 +55,7 @@ publish-dev:
     - schedules
   <<: *docker-login
   script:
-    - cd Docker/dev
-    - docker build -t cyberos-dev .
+    - docker build -f Docker/dev/Dockerfile -t cyberos-dev .
     - docker tag cyberos-dev ${REGISTRY}/cyberos-dev:${CI_COMMIT_SHA:0:8}
     - docker tag cyberos-dev ${REGISTRY}/cyberos-dev:${CI_COMMIT_REF_NAME}-latest
     - docker tag cyberos-dev ${REGISTRY}/cyberos-dev:latest
