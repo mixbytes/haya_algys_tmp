@@ -319,6 +319,9 @@ private:
             case randpa_net_msg_data::tag<precommit_msg>::value:
                 process_round_msg(ses_id, data.get<precommit_msg>());
                 break;
+            case randpa_net_msg_data::tag<proof_msg>::value:
+                on(ses_id, data.get<proof_msg>());
+                break;
             case randpa_net_msg_data::tag<handshake_msg>::value:
                 on(ses_id, data.get<handshake_msg>());
                 break;
@@ -351,6 +354,100 @@ private:
                 );
                 break;
         }
+    }
+
+    bool validate_prevote(const prevote_type& prevote, const public_key_type& prevoter_key,
+            const block_id_type& best_block, const set<public_key_type>& bp_keys) {
+        if (prevote.base_block != best_block
+            && std::find(prevote.blocks.begin(), prevote.blocks.end(), best_block) == prevote.blocks.end()) {
+            dlog("Best block: ${id} was found in prevote blocks", ("id", best_block));
+        } else if (!bp_keys.count(prevoter_key)) {
+            dlog("Prevoter public key is not in active bp keys: ${pub_key}",
+                 ("pub_key", prevoter_key));
+        } else {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool validate_precommit(const precommit_type& precommit, const public_key_type& precommiter_key,
+            const block_id_type& best_block, const set<public_key_type>& bp_keys) {
+        if (precommit.block_id != best_block) {
+            dlog("Precommit block ${pbid}, best block: ${bbid}",
+                 ("pbid", precommit.block_id)
+                 ("bbid", best_block));
+        } else if (!bp_keys.count(precommiter_key)) {
+            dlog("Precommitter public key is not in active bp keys: ${pub_key}",
+                 ("pub_key", precommiter_key));
+        } else {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool validate_proof(const proof_type& proof) {
+        auto best_block = proof.best_block;
+        auto node = _prefix_tree->find(best_block);
+
+        if (!node) {
+            wlog("Received proof for unknown block: ${block_id}", ("block_id", best_block));
+            return false;
+        }
+
+        set<public_key_type> prevoted_keys, precommited_keys;
+        const auto& bp_keys = node->active_bp_keys;
+
+        for (const auto& prevote : proof.prevotes) {
+            const auto& prevoter_pub_key = prevote.public_key();
+            if (!validate_prevote(prevote.data, prevoter_pub_key, best_block, bp_keys)) {
+                wlog("Prevote validation failed, base_block: ${id}, blocks: ${blocks}",
+                     ("id", prevote.data.base_block)
+                     ("blocks", prevote.data.blocks));
+                return false;
+            }
+            prevoted_keys.insert(prevoter_pub_key);
+        }
+
+        for (const auto& precommit : proof.precommits) {
+            const auto& precommiter_pub_key = precommit.public_key();
+            if (!prevoted_keys.count(precommiter_pub_key)) {
+                wlog("Precommiter has not prevoted, pub_key: ${pub_key}", ("pub_key", precommiter_pub_key));
+                return false;
+            }
+
+            if (!validate_precommit(precommit.data, precommiter_pub_key, best_block, bp_keys)) {
+                wlog("Precommit validation failed for ${id}", ("id", precommit.data.block_id));
+                return false;
+            }
+            precommited_keys.insert(precommiter_pub_key);
+        }
+        return precommited_keys.size() > node->active_bp_keys.size() * 2 / 3;
+    }
+
+    void on(uint32_t ses_id, const proof_msg& msg) {
+        wlog("Randpa proof_msg received, msg: ${msg}", ("msg", msg));
+        const auto& proof = msg.data;
+        if (get_block_num(_lib) >= get_block_num(proof.best_block)) {
+            dlog("Skiping proof for ${id} cause lib ${lib} is higher",
+                    ("id", proof.best_block)
+                    ("lib", _lib));
+            return;
+        }
+
+        if (!validate_proof(proof)) {
+            wlog("Invalid proof received from ${peer}", ("peer", msg.public_key()));
+            return;
+        }
+
+        ilog("Successfully validated proof for block ${id}", ("id", proof.best_block));
+
+        if (_round->get_num() == proof.round_num) {
+            _round->set_state(randpa_round::state::done);
+        }
+        _finality_channel->send(proof.best_block);
+        bcast(msg);
     }
 
     void on(uint32_t ses_id, const handshake_msg& msg) {
@@ -482,19 +579,20 @@ private:
         }
 
         dlog("Randpa finishing round, num: ${n}", ("n", _round->get_num()));
-        _round->finish();
+        if (!_round->finish()) {
+            return;
+        }
 
-        if (_round->get_state() == randpa_round::state::done) {
-            auto proof = _round->get_proof();
-            ilog("Randpa round reached supermajority, round num: ${n}, best block id: ${b}, best block num: ${bn}",
-                ("n", proof.round_num)
-                ("b", proof.best_block)
-                ("bn", get_block_num(proof.best_block))
-            );
+        auto proof = _round->get_proof();
+        ilog("Randpa round reached supermajority, round num: ${n}, best block id: ${b}, best block num: ${bn}",
+            ("n", proof.round_num)
+            ("b", proof.best_block)
+            ("bn", get_block_num(proof.best_block))
+        );
 
-            if (get_block_num(_lib) < get_block_num(proof.best_block)) {
-                _finality_channel->send(proof.best_block);
-            }
+        if (get_block_num(_lib) < get_block_num(proof.best_block)) {
+            _finality_channel->send(proof.best_block);
+            bcast(proof_msg(proof, _private_key));
         }
     }
 
