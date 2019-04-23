@@ -120,6 +120,7 @@ struct on_accepted_block_event {
     block_id_type prev_block_id;
     public_key_type creator_key;
     std::set<public_key_type> active_bp_keys;
+    bool sync;
 };
 
 struct on_irreversible_event {
@@ -389,6 +390,11 @@ private:
                 ("base_id", event.prev_block_id)
                 ("id", event.block_id)
             );
+            return;
+        }
+
+        if (event.sync) {
+            ilog("Randpa omit block while syncing, id: ${id}", ("id", event.block_id));
             return;
         }
 
