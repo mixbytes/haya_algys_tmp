@@ -151,12 +151,19 @@ private:
         }
 
         auto chain = tree->get_branch(last_node->block_id);
+
+        if (!is_active_bp(chain.blocks.back())) {
+            dlog("Skipping prevote msg cause not an active bp for "
+                 "${id} ${bp} ${bps}",
+                 ("id", chain.blocks.back())
+                 ("bp", private_key.get_public_key())
+                 ("bps", get_active_bps(chain.blocks.back())));
+            return;
+        }
+
         auto prevote = prevote_type { num, chain.base_block, std::move(chain.blocks) };
-
         auto msg = prevote_msg(prevote, private_key);
-
         add_prevote(msg);
-
         prevote_bcaster(msg);
     }
 
@@ -291,6 +298,15 @@ private:
 
     bool has_threshold_prevotes(const tree_node_ptr& node) {
         return node->confirmation_number() > 2 * node->active_bp_keys.size() / 3;
+    }
+
+    set<public_key_type> get_active_bps(const block_id_type& block_id) {
+        auto node = tree->find(block_id);
+        return node ? node->active_bp_keys : set<public_key_type>();
+    };
+
+    bool is_active_bp(const block_id_type& block_id) {
+        return get_active_bps(block_id).count(private_key.get_public_key());
     }
 
     uint32_t num { 0 };
