@@ -68,7 +68,8 @@ public:
                     s->id,
                     s->header.previous,
                     s->block_signing_key,
-                    get_bp_keys(s)
+                    get_bp_keys(s),
+                    is_sync(s)
             } });
         });
 
@@ -114,6 +115,10 @@ public:
         });
 
         _randpa.start(copy_fork_db());
+    }
+
+    static bool is_sync(const block_state_ptr& block) {
+        return fc::time_point::now() - block->header.timestamp > fc::seconds(2);
     }
 
     prefix_tree_ptr copy_fork_db() {
