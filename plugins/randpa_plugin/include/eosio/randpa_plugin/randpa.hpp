@@ -360,7 +360,7 @@ private:
             const block_id_type& best_block, const set<public_key_type>& bp_keys) {
         if (prevote.base_block != best_block
             && std::find(prevote.blocks.begin(), prevote.blocks.end(), best_block) == prevote.blocks.end()) {
-            dlog("Best block: ${id} was found in prevote blocks", ("id", best_block));
+            dlog("Best block: ${id} was not found in prevote blocks", ("id", best_block));
         } else if (!bp_keys.count(prevoter_key)) {
             dlog("Prevoter public key is not in active bp keys: ${pub_key}",
                  ("pub_key", prevoter_key));
