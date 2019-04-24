@@ -1,109 +1,80 @@
+# Haya - blockchain with fast finality based on EOS
 
-# EOSIO - The Most Powerful Infrastructure for Decentralized Applications
+Haya implements randpa finality for EOS. Randpa was inspired by grandpa.
+We will publish a whitepaper soon.
 
-[![Build status](https://badge.buildkite.com/370fe5c79410f7d695e4e34c500b4e86e3ac021c6b1f739e20.svg?branch=master)](https://buildkite.com/EOSIO/eosio)
+# Build
 
-Welcome to the EOSIO source code repository! This software enables businesses to rapidly build and deploy high-performance and high-security blockchain-based applications.
-
-Some of the groundbreaking features of EOSIO include:
-
-1. Free Rate Limited Transactions
-1. Low Latency Block confirmation (0.5 seconds)
-1. Low-overhead Byzantine Fault Tolerant Finality
-1. Designed for optional high-overhead, low-latency BFT finality
-1. Smart contract platform powered by WebAssembly
-1. Designed for Sparse Header Light Client Validation
-1. Scheduled Recurring Transactions
-1. Time Delay Security
-1. Hierarchical Role Based Permissions
-1. Support for Biometric Hardware Secured Keys (e.g. Apple Secure Enclave)
-1. Designed for Parallel Execution of Context Free Validation Logic
-1. Designed for Inter Blockchain Communication
-
-EOSIO is released under the open source MIT license and is offered “AS IS” without warranty of any kind, express or implied. Any security provided by the EOSIO software depends in part on how it is used, configured, and deployed. EOSIO is built upon many third-party libraries such as WABT (Apache License) and WAVM (BSD 3-clause) which are also provided “AS IS” without warranty of any kind. Without limiting the generality of the foregoing, Block.one makes no representation or guarantee that EOSIO or any third-party libraries will perform as intended or will be free of errors, bugs or faulty code. Both may fail in large or small ways that could completely or partially limit functionality or compromise computer systems. If you use or implement EOSIO, you do so at your own risk. In no event will Block.one be liable to any party for any damages whatsoever, even if it had been advised of the possibility of damage.  
-
-Block.one is neither launching nor operating any initial public blockchains based upon the EOSIO software. This release refers only to version 1.0 of our open source software. We caution those who wish to use blockchains built on EOSIO to carefully vet the companies and organizations launching blockchains based on EOSIO before disclosing any private keys to their derivative software.
-
-There is no public testnet running currently.
-
-**If you have previously installed EOSIO, please run the `eosio_uninstall` script (it is in the directory where you cloned EOSIO) before downloading and using the binary releases.**
-
-#### Mac OS X Brew Install
-```sh
-$ brew tap eosio/eosio
-$ brew install eosio
-```
-#### Mac OS X Brew Uninstall
-```sh
-$ brew remove eosio
-```
-#### Ubuntu 18.04 Debian Package Install
-```sh
-$ wget https://github.com/eosio/eos/releases/download/v1.7.1/eosio_1.7.1-1-ubuntu-18.04_amd64.deb
-$ sudo apt install ./eosio_1.7.1-1-ubuntu-18.04_amd64.deb
-```
-#### Ubuntu 16.04 Debian Package Install
-```sh
-$ wget https://github.com/eosio/eos/releases/download/v1.7.1/eosio_1.7.1-1-ubuntu-16.04_amd64.deb
-$ sudo apt install ./eosio_1.7.1-1-ubuntu-16.04_amd64.deb
-```
-#### Debian Package Uninstall
-```sh
-$ sudo apt remove eosio
-```
-#### Centos RPM Package Install
-```sh
-$ wget https://github.com/eosio/eos/releases/download/v1.7.1/eosio-1.7.1-1.el7.x86_64.rpm
-$ sudo yum install ./eosio-1.7.1-1.el7.x86_64.rpm
-```
-#### Centos RPM Package Uninstall
-```sh
-$ sudo yum remove eosio.cdt
-```
-#### Fedora RPM Package Install
-```sh
-$ wget https://github.com/eosio/eos/releases/download/v1.7.1/eosio-1.7.1-1.fc27.x86_64.rpm
-$ sudo yum install ./eosio-1.7.1-1.fc27.x86_64.rpm
-```
-#### Fedora RPM Package Uninstall
-```sh
-$ sudo yum remove eosio.cdt
+```bash
+./scripts/eosio_build.sh
 ```
 
-## Supported Operating Systems
-EOSIO currently supports the following operating systems:  
-1. Amazon 2017.09 and higher
-2. Centos 7
-3. Fedora 25 and higher (Fedora 27 recommended)
-4. Mint 18
-5. Ubuntu 16.04
-6. Ubuntu 18.04
-7. MacOS Darwin 10.12 and higher (MacOS 10.14.x recommended)
+# Run tests
+```bash
+./plugins/randpa_plugin/tests/randpa_plugin_unit_test
+```
 
-## Resources
-1. [Website](https://eos.io)
-1. [Blog](https://medium.com/eosio)
-1. [Developer Portal](https://developers.eos.io)
-1. [StackExchange for Q&A](https://eosio.stackexchange.com/)
-1. [Community Telegram Group](https://t.me/EOSProject)
-1. [Developer Telegram Group](https://t.me/joinchat/EaEnSUPktgfoI-XPfMYtcQ)
-1. [White Paper](https://github.com/EOSIO/Documentation/blob/master/TechnicalWhitePaper.md)
-1. [Roadmap](https://github.com/EOSIO/Documentation/blob/master/Roadmap.md)
+We have also coded our own blockchain simulator for testing. It 
+saves us a ton of time when debugging.
 
-<a name="gettingstarted"></a>
-## Getting Started
-Instructions detailing the process of getting the software, building it, running a simple test network that produces blocks, account creation and uploading a sample contract to the blockchain can be found in [Getting Started](https://developers.eos.io/eosio-home/docs) on the [EOSIO Developer Portal](https://developers.eos.io).
+Run `randpa_finality.three_nodes` test:
 
-## Contributing
+```bash
+./simulator/simulator --gtest_filter=randpa_finality.three_nodes
+ ```
 
-[Contributing Guide](./CONTRIBUTING.md)
+# Run one node
 
-[Code of Conduct](./CONTRIBUTING.md#conduct)
+For the purpose of this tutorial we have provided basic config files in the tutorials/randpa-tutorial/configs 
+directory.
 
-## License
+Assuming you have your executable in the build directory you can start the node
+by running 
+ 
+```bash 
 
-[MIT](./LICENSE)
+./bin/nodeos --delete-all-blocks -c ../tutorials/randpa-tutorial/configs/config0.ini
 
-## Important
+...
 
-See LICENSE for copyright and license terms.  Block.one makes its contribution on a voluntary basis as a member of the EOSIO community and is not responsible for ensuring the overall performance of the software or any related applications.  We make no representation, warranty, guarantee or undertaking in respect of the software or any related documentation, whether expressed or implied, including but not limited to the warranties or merchantability, fitness for a particular purpose and noninfringement. In no event shall we be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or documentation or the use or other dealings in the software or documentation.  Any test results or performance figures are indicative and will not reflect performance under all conditions.  Any reference to any third party or third-party product, service or other resource is not an endorsement or recommendation by Block.one.  We are not responsible, and disclaim any and all responsibility and liability, for your use of or reliance on any of these resources. Third-party resources may be updated, changed or terminated at any time, so the information here may be out of date or inaccurate.
+info  2019-04-24T11:42:24.505 thread-0  producer_plugin.cpp:1597      produce_block        ] Produced block 00000002c38eb2c3... #2 @ 2019-04-24T11:42:24.500 signed by eosio [trxs: 0, lib: 0, confirmed: 0]
+info  2019-04-24T11:42:24.509 thread-2  randpa.hpp:585                finish_round         ] Randpa round reached supermajority, round num: 0, best block id: 00000002c38eb2c3cbebceb88129aa6d189c33d1449bb0397e0340cccc81840d, best block num: 2
+info  2019-04-24T11:42:25.004 thread-0  producer_plugin.cpp:1597      produce_block        ] Produced block 000000039de520a9... #3 @ 2019-04-24T11:42:25.000 signed by eosio [trxs: 0, lib: 2, confirmed: 0]
+info  2019-04-24T11:42:25.504 thread-0  producer_plugin.cpp:1597      produce_block        ] Produced block 000000043a87c431... #4 @ 2019-04-24T11:42:25.500 signed by eosio [trxs: 0, lib: 3, confirmed: 0]
+info  2019-04-24T11:42:25.507 thread-2  randpa.hpp:585                finish_round         ] Randpa round reached supermajority, round num: 1, best block id: 000000039de520a9a62390ed3abc545ef3ae80428513fc35ba515edba09acd1c, best block num: 3
+info  2019-04-24T11:42:26.004 thread-0  producer_plugin.cpp:1597      produce_block        ] Produced block 0000000590e6067f... #5 @ 2019-04-24T11:42:26.000 signed by eosio [trxs: 0, lib: 4, confirmed: 0]
+info  2019-04-24T11:42:26.508 thread-0  producer_plugin.cpp:1597      produce_block        ] Produced block 00000006510daf43... #6 @ 2019-04-24T11:42:26.500 signed by eosio [trxs: 0, lib: 5, confirmed: 0]
+info  2019-04-24T11:42:26.511 thread-2  randpa.hpp:585                finish_round         ] Randpa round reached supermajority, round num: 2, best block id: 0000000590e6067f9390cfe2e643de0ffc6dc5094ab750bd5bf1f3b159e62595, best block num: 5
+info  2019-04-24T11:42:27.003 thread-0  producer_plugin.cpp:1597      produce_block        ] Produced block 00000007b7dbaaf8... #7 @ 2019-04-24T11:42:27.000 signed by eosio [trxs: 0, lib: 6, confirmed: 0]
+info  2019-04-24T11:42:27.506 thread-0  producer_plugin.cpp:1597      produce_block        ] Produced block 00000008e2d399a5... #8 @ 2019-04-24T11:42:27.500 signed by eosio [trxs: 0, lib: 7, confirmed: 0]
+info  2019-04-24T11:42:27.508 thread-2  randpa.hpp:585                finish_round         ] Randpa round reached supermajority, round num: 3, best block id: 00000007b7dbaaf833cfa95495192a2dd117fb81428c9ba6e25f141a0cd37e19, best block num: 7
+```
+
+If you see "Randpa reached supermajority" messages then you have successfully launched your node.
+
+# Run multiple nodes
+
+Running N nodes is as easy as running one with an additional step 
+of setting block producers
+
+1.Run 3 nodes
+
+```bash
+./bin/nodeos --delete-all-blocks -c ../tutorials/randpa-tutorial/config0.ini
+./bin/nodeos --delete-all-blocks -c ../tutorials/randpa-tutorial/config1.ini
+./bin/nodeos --delete-all-blocks -c ../tutorials/randpa-tutorial/config2.ini
+```
+ 
+2.Set block producers
+```bash
+./../tutorials/randpa-tutorial/setup.sh <your-wallet-pass>
+```
+
+3.Check for "Randpa reached suppermajority" messages in node logs
+  
+# Contributing to Haya
+
+Interested in contributing? That's awesome! Please follow our git flow:
+
+![Alt text](images/flow.svg)
+
