@@ -439,6 +439,11 @@ private:
         auto self_pub_key = _private_key.get_public_key();
         auto msg_hash = digest_type::hash(msg);
 
+        if (msg.data.round_num < _round->get_num()) {
+            dlog("Randpa omit message for old round");
+            return;
+        }
+
         bcast(msg);
 
         if (!known_messages[self_pub_key].count(msg_hash)) {

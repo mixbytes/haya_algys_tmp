@@ -1209,7 +1209,7 @@ namespace eosio {
          void send(uint32_t session_id, uint32_t msg_type, const vector<char> & msg) {
             auto mess = std::make_shared<custom_message>(custom_message {msg_type, msg});
 
-            app().get_io_service().post([this, session_id, mess] {
+            app().post(priority::low, [this, session_id, mess] {
                if (_sessions_by_num.find(session_id) != _sessions_by_num.end()) {
                   auto ses_wptr = _sessions[_sessions_by_num[session_id]];
                   if (auto ses = ses_wptr.lock()) {
