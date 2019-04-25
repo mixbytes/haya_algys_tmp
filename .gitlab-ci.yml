@@ -36,11 +36,11 @@ publish-nomral:
     - schedules
   <<: *docker-login
   script:
-    - docker build -f Docker/Dockerfile -t cyberos .
-    - docker tag cyberos ${REGISTRY}/cyberos:${CI_COMMIT_SHA:0:8}
-    - docker tag cyberos ${REGISTRY}/cyberos:${CI_COMMIT_REF_NAME}-latest
-    - docker tag cyberos ${REGISTRY}/cyberos:latest
-    - docker push ${REGISTRY}/cyberos
+    - docker build -f Docker/Dockerfile -t haya --build-arg registry=${REGISTRY} .
+    - docker tag haya ${REGISTRY}/haya:${CI_COMMIT_SHA:0:8}
+    - docker tag haya ${REGISTRY}/haya:${CI_COMMIT_REF_NAME}-latest
+    - docker tag haya ${REGISTRY}/haya:latest
+    - docker push ${REGISTRY}/haya
 
 publish-dev:
   stage: publish to gitlab registry dev
@@ -59,11 +59,11 @@ publish-dev:
     - schedules
   <<: *docker-login
   script:
-    - docker build -f Docker/dev/Dockerfile -t cyberos-dev .
-    - docker tag cyberos-dev ${REGISTRY}/cyberos-dev:${CI_COMMIT_SHA:0:8}
-    - docker tag cyberos-dev ${REGISTRY}/cyberos-dev:${CI_COMMIT_REF_NAME}-latest
-    - docker tag cyberos-dev ${REGISTRY}/cyberos-dev:latest
-    - docker push ${REGISTRY}/cyberos-dev
+    - docker build -f Docker/dev/Dockerfile -t haya-dev --build-arg registry=${REGISTRY} .
+    - docker tag haya-dev ${REGISTRY}/haya-dev:${CI_COMMIT_SHA:0:8}
+    - docker tag haya-dev ${REGISTRY}/haya-dev:${CI_COMMIT_REF_NAME}-latest
+    - docker tag haya-dev ${REGISTRY}/haya-dev:latest
+    - docker push ${REGISTRY}/haya-dev
 
 publish-builder:
   stage: publish builder
@@ -85,8 +85,8 @@ publish-builder:
   <<: *docker-login
   script:
     - cd Docker/builder
-    - docker build -t cyberos-builder .
-    - docker tag cyberos-builder ${REGISTRY}/cyberos-builder:${CI_COMMIT_SHA:0:8}
-    - docker tag cyberos-builder ${REGISTRY}/cyberos-builder:${CI_COMMIT_REF_NAME}-latest
-    - docker tag cyberos-builder ${REGISTRY}/cyberos-builder:latest
-    - docker push ${REGISTRY}/cyberos-builder
+    - docker build -t haya-builder .
+    - docker tag haya-builder ${REGISTRY}/haya-builder:${CI_COMMIT_SHA:0:8}
+    - docker tag haya-builder ${REGISTRY}/haya-builder:${CI_COMMIT_REF_NAME}-latest
+    - docker tag haya-builder ${REGISTRY}/haya-builder:latest
+    - docker push ${REGISTRY}/haya-builder
