@@ -80,6 +80,10 @@ public:
         _new_msg_cond.notify_one();
     }
 
+    size_t size() const {
+        return _message_queue.size();
+    }
+
 private:
     std::mutex _message_queue_mutex;
     bool _need_notify = true;
@@ -232,7 +236,10 @@ private:
 
     void subscribe() {
         _in_net_channel->subscribe([&](const randpa_net_msg& msg) {
-            dlog("Randpa received net message, type: ${type}", ("type", msg.data.which()));
+            #ifndef SYNC_RANDPA
+                dlog("Randpa received net message, type: ${type}, size: ${size}",
+                    ("type", msg.data.which())("size", _message_queue.size()));
+            #endif
 #ifdef SYNC_RANDPA
             process_msg(std::make_shared<randpa_message>(msg));
 #else
@@ -429,8 +436,8 @@ private:
     void on(uint32_t ses_id, const proof_msg& msg) {
         wlog("Randpa proof_msg received, msg: ${msg}", ("msg", msg));
         const auto& proof = msg.data;
-        if (get_block_num(_lib) >= get_block_num(proof.best_block)) {
-            dlog("Skiping proof for ${id} cause lib ${lib} is higher",
+        if (_round->get_state() == randpa_round::state::done || get_block_num(_lib) >= get_block_num(proof.best_block)) {
+            dlog("Skipping proof for ${id} cause lib ${lib} is higher",
                     ("id", proof.best_block)
                     ("lib", _lib));
             return;

@@ -28,9 +28,9 @@ publish-nomral:
     DOCKER_DRIVER: overlay2
   only:
     refs:
-      - master
-      - develop
-      - /^hotfix-.*$/i
+        - master
+        - develop
+        - /^hotfix-.*$/i
   services:
     - docker:dind
   except:
