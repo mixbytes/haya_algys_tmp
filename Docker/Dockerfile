@@ -1,8 +1,9 @@
-FROM registry.gitlab.com/cyberos/infrastructure/cyberos-builder:latest as builder
+ARG registry
+FROM ${registry}/haya-builder:latest as builder
 ARG symbol=SYS
 
-ADD . cyberos
-WORKDIR cyberos
+ADD . haya
+WORKDIR haya
 
 RUN git submodule init && git submodule update --init --recursive
 
@@ -17,9 +18,9 @@ FROM ubuntu:18.04
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -y install openssl ca-certificates libcurl4-openssl-dev libusb-1.0 && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/local/lib/* /usr/local/lib/
 COPY --from=builder /tmp/build/bin /opt/eosio/bin
-COPY --from=builder /cyberos/Docker/config.ini /
+COPY --from=builder /haya/Docker/config.ini /
 COPY --from=builder /etc/eosio-version /etc
-COPY --from=builder /cyberos/Docker/nodeosd.sh /opt/eosio/bin/nodeosd.sh
+COPY --from=builder /haya/Docker/nodeosd.sh /opt/eosio/bin/nodeosd.sh
 ENV EOSIO_ROOT=/opt/eosio
 RUN chmod +x /opt/eosio/bin/nodeosd.sh
 ENV LD_LIBRARY_PATH /usr/local/lib
