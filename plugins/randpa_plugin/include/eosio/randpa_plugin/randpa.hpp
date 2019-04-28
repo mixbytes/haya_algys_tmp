@@ -434,9 +434,9 @@ private:
     }
 
     void on(uint32_t ses_id, const proof_msg& msg) {
-        wlog("Randpa proof_msg received, msg: ${msg}", ("msg", msg));
+        dlog("Randpa proof_msg received, msg: ${msg}", ("msg", msg));
         const auto& proof = msg.data;
-        if (_round->get_state() == randpa_round::state::done || get_block_num(_lib) >= get_block_num(proof.best_block)) {
+        if (_round && _round->get_state() == randpa_round::state::done || get_block_num(_lib) >= get_block_num(proof.best_block)) {
             dlog("Skipping proof for ${id} cause lib ${lib} is higher",
                     ("id", proof.best_block)
                     ("lib", _lib));
@@ -450,7 +450,7 @@ private:
 
         ilog("Successfully validated proof for block ${id}", ("id", proof.best_block));
 
-        if (_round->get_num() == proof.round_num) {
+        if (_round && _round->get_num() == proof.round_num) {
             _round->set_state(randpa_round::state::done);
         }
         _finality_channel->send(proof.best_block);
