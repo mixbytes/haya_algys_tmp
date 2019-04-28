@@ -427,12 +427,19 @@ private:
     }
 
     void on(uint32_t ses_id, const proof_msg& msg) {
-        wlog("Randpa proof_msg received, msg: ${msg}", ("msg", msg));
+        dlog("Randpa proof_msg received, msg: ${msg}", ("msg", msg));
         const auto& proof = msg.data;
         if (get_block_num(_lib) >= get_block_num(proof.best_block)) {
-            dlog("Skiping proof for ${id} cause lib ${lib} is higher",
+            dlog("Skipping proof for ${id} cause lib ${lib} is higher",
                     ("id", proof.best_block)
                     ("lib", _lib));
+            return;
+        }
+
+        if (_round && _round->get_state() == randpa_round::state::done) {
+            dlog("Skipping proof for ${id} cause round ${num} is finished",
+                 ("id", proof.best_block)
+                 ("num", _round->get_num()));
             return;
         }
 
@@ -443,7 +450,8 @@ private:
 
         ilog("Successfully validated proof for block ${id}", ("id", proof.best_block));
 
-        if (_round->get_num() == proof.round_num) {
+        if (_round && _round->get_num() == proof.round_num) {
+            dlog("Gotta proof for round ${num}", ("num", _round->get_num()));
             _round->set_state(randpa_round::state::done);
         }
         _finality_channel->send(proof.best_block);
@@ -497,7 +505,8 @@ private:
 
         if (should_start_round(event.block_id)) {
             clear_round_data();
-            new_round(round_num(event.block_id), event.creator_key);
+            new_round(round_num(event.block_id), event.creator_key,
+                    event.active_bp_keys.count(_private_key.get_public_key()));
         }
 
         if (should_end_prevote(event.block_id)) {
@@ -539,7 +548,9 @@ private:
         bcast(msg);
 
         if (!known_messages[self_pub_key].count(msg_hash)) {
-            _round->on(msg);
+            if (_round->is_active_bp()) {
+                _round->on(msg);
+            }
             known_messages[self_pub_key].insert(msg_hash);
         }
     }
@@ -596,9 +607,9 @@ private:
         }
     }
 
-    void new_round(uint32_t round_num, const public_key_type& primary) {
+    void new_round(uint32_t round_num, const public_key_type& primary, bool is_active_bp) {
         dlog("Randpa staring round, num: ${n}", ("n", round_num));
-        _round.reset(new randpa_round(round_num, primary, _prefix_tree, _private_key,
+        _round.reset(new randpa_round(round_num, primary, _prefix_tree, _private_key, is_active_bp,
         [this](const prevote_msg& msg) {
             bcast(msg);
         },

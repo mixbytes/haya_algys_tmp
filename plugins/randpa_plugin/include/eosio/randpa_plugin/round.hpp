@@ -36,6 +36,7 @@ public:
         const public_key_type& primary,
         const prefix_tree_ptr& tree,
         const private_key_type& private_key,
+        bool is_block_producer,
         prevote_bcaster_type && prevote_bcaster,
         precommit_bcaster_type && precommit_bcaster,
         done_cb_type && done_cb
@@ -44,6 +45,7 @@ public:
         primary(primary),
         tree(tree),
         private_key(private_key),
+        is_block_producer(is_block_producer),
         prevote_bcaster(std::move(prevote_bcaster)),
         precommit_bcaster(std::move(precommit_bcaster)),
         done_cb(std::move(done_cb))
@@ -53,7 +55,9 @@ public:
             ("p", primary)
         );
 
-        prevote();
+        if (is_block_producer) {
+            prevote();
+        }
     }
 
     uint32_t get_num() const {
@@ -66,6 +70,10 @@ public:
 
     void set_state(const state& s) {
         state = s;
+    }
+
+    bool is_active_bp() const {
+        return is_block_producer;
     }
 
     proof_type get_proof() {
@@ -151,15 +159,6 @@ private:
         }
 
         auto chain = tree->get_branch(last_node->block_id);
-
-        if (!is_active_bp(chain.blocks.back())) {
-            dlog("Skipping prevote msg cause not an active bp for "
-                 "${id} ${bp} ${bps}",
-                 ("id", chain.blocks.back())
-                 ("bp", private_key.get_public_key())
-                 ("bps", get_active_bps(chain.blocks.back())));
-            return;
-        }
 
         auto prevote = prevote_type { num, chain.base_block, std::move(chain.blocks) };
         auto msg = prevote_msg(prevote, private_key);
@@ -316,6 +315,7 @@ private:
     proof_type proof;
     tree_node_ptr best_node;
     private_key_type private_key;
+    bool is_block_producer;
     prevote_bcaster_type prevote_bcaster;
     precommit_bcaster_type precommit_bcaster;
     done_cb_type done_cb;
