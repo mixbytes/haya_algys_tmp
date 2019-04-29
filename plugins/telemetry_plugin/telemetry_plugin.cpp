@@ -16,6 +16,7 @@ namespace eosio {
     using namespace prometheus;
 
     static appbase::abstract_plugin &_telemetry_plugin = app().register_plugin<telemetry_plugin>();
+    static const int64_t MAX_LATENCY = 2000;
 
     class telemetry_plugin_impl {
     private:
@@ -45,6 +46,12 @@ namespace eosio {
                         int64_t latency_millis = latency.count() / 1000;
                         last_irreversible_latency->Set(latency_millis);
                         irreversible_latency_hist->Observe(latency_millis);
+
+                        if (latency_millis > MAX_LATENCY) {
+                            elog("Failed to finalize block ${id} within ${latency}ms window",
+                                         ("id", s->id)
+                                         ("latency", MAX_LATENCY));
+                        }
                     });
         }
 
