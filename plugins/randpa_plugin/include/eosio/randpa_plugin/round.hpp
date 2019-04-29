@@ -75,15 +75,17 @@ public:
     }
 
     void on(const prevote_msg& msg) {
-        dlog("Received prevote: msg: ${m}", ("m", msg));
-
+        dlog("Received prevote for round ${num}",
+             ("num", num));
         if (state != state::prevote && state != state::ready_to_precommit) {
             dlog("Prevote while wrong state, round: ${r}", ("r", num));
             return;
         }
 
         if (!validate_prevote(msg)) {
-            dlog("Prevote validation fail, round: ${r}", ("r", num));
+            dlog("Invalid prevote for round ${num}: ${msg}",
+                 ("num", num)
+                 ("msg", msg));
             return;
         }
 
@@ -91,7 +93,8 @@ public:
     }
 
     void on(const precommit_msg& msg) {
-        dlog("Received precommit, msg: ${m}", ("m", msg));
+        dlog("Received precommit for round ${num}",
+             ("num", num));
 
         if (state != state::precommit && state != state::ready_to_precommit) {
             dlog("Precommit while wrong state, round: ${r}", ("r", num));
@@ -99,7 +102,9 @@ public:
         }
 
         if (!validate_precommit(msg)) {
-            dlog("Precommit validation fail, round: ${r}", ("r", num));
+            dlog("Invalid precommit for round ${num}: ${msg}",
+                 ("num", num)
+                 ("msg", msg));
             return;
         }
 
