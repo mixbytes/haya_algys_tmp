@@ -30,6 +30,7 @@ publish-nomral:
     refs:
       - master
       - develop
+      - /^cyb-.*$/i
   services:
     - docker:dind
   except:

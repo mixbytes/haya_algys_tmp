@@ -17,6 +17,7 @@ public:
     void plugin_initialize(const variables_map& options);
     void plugin_startup();
     void plugin_shutdown();
+    size_t message_queue_size();
 
 private:
     std::unique_ptr<class randpa_plugin_impl> my;

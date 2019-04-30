@@ -6,6 +6,8 @@
 #include <fc/exception/exception.hpp>
 #include <eosio/chain/plugin_interface.hpp>
 #include <prometheus/exposer.h>
+#include <eosio/randpa_plugin/randpa_plugin.hpp>
+#include <eosio/randpa_plugin/randpa.hpp>
 
 #define LATENCY_HISTOGRAM_KEYPOINTS \
     {1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 15000, 20000, 180000}
@@ -29,6 +31,8 @@ namespace eosio {
         std::unique_ptr<Counter> accepted_trx_count;
         std::unique_ptr<Histogram> irreversible_latency_hist;
         std::unique_ptr<Gauge> last_irreversible_latency;
+        std::unique_ptr<Gauge> queue_size;
+        std::unique_ptr<Gauge> lib_num;
 
         void start_server() {
             exposer = std::make_unique<Exposer>(endpoint, uri, threads);
@@ -37,7 +41,10 @@ namespace eosio {
         void add_event_handlers() {
             _on_accepted_block_handle = app().get_channel<channels::accepted_block>()
                     .subscribe([this](block_state_ptr s) {
-                        accepted_trx_count->Increment(s.get()->trxs.size());
+                        accepted_trx_count->Increment(s->trxs.size());
+#ifndef SYNC_RANDPA
+                        queue_size->Set(app().get_plugin<randpa_plugin>().message_queue_size());
+#endif
                     });
 
             _on_irreversible_block_handle = app().get_channel<channels::irreversible_block>()
@@ -46,6 +53,8 @@ namespace eosio {
                         int64_t latency_millis = latency.count() / 1000;
                         last_irreversible_latency->Set(latency_millis);
                         irreversible_latency_hist->Observe(latency_millis);
+
+                        lib_num->Set(randpa_finality::get_block_num(s->id));
 
                         if (latency_millis > MAX_LATENCY) {
                             elog("Failed to finalize block ${id} within ${latency}ms window",
@@ -85,6 +94,21 @@ namespace eosio {
                             .Add({})
             );
 
+            queue_size.reset(
+                    &BuildGauge()
+                            .Name("queue_size")
+                            .Help("Randpa message queue size")
+                            .Register(*registry)
+                            .Add({})
+            );
+
+            lib_num.reset(
+                    &BuildGauge()
+                            .Name("lib_num")
+                            .Help("Last irreversible block num")
+                            .Register(*registry)
+                            .Add({})
+            );
 
             exposer->RegisterCollectable(std::weak_ptr<Registry>(registry));
         }

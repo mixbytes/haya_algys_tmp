@@ -80,6 +80,11 @@ public:
         _new_msg_cond.notify_one();
     }
 
+    size_t size() {
+        mutex_guard lock(_message_queue_mutex);
+        return _message_queue.size();
+    }
+
 private:
     std::mutex _message_queue_mutex;
     bool _need_notify = true;
@@ -210,6 +215,12 @@ public:
         _thread_ptr->join();
 #endif
     }
+
+#ifndef SYNC_RANDPA
+    size_t queue_size() {
+        return _message_queue.size();
+    }
+#endif
 
 private:
     std::unique_ptr<std::thread> _thread_ptr;
@@ -479,11 +490,19 @@ private:
     }
 
     void on(const on_accepted_block_event& event) {
-        dlog("Randpa on_accepted_block_event event handled, block_id: ${id}, num: ${num}, creator: ${c}, bp_keys: ${bpk}",
+
+        dlog("Randpa on_accepted_block_event event handled, block_id: ${id}, num: ${num}, creator: ${c}, bp_keys: ${bpk},"
+#ifndef SYNC_RANDPA
+             "qsize: ${qsize}"
+#endif
+            ,
             ("id", event.block_id)
             ("num", get_block_num(event.block_id))
             ("c", event.creator_key)
             ("bpk", event.active_bp_keys)
+#ifndef SYNC_RANDPA
+            ("qsize", _message_queue.size())
+#endif
         );
 
         try {

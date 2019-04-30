@@ -208,4 +208,8 @@ void randpa_plugin::plugin_shutdown() {
     my->stop();
 }
 
+size_t randpa_plugin::message_queue_size() {
+    return my->_randpa.queue_size();
+}
+
 }
